@@ -1,7 +1,7 @@
 from langchain_community.document_loaders import TextLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
@@ -9,9 +9,6 @@ import os
 
 class CampusKnowledgeBase:
     def __init__(self, api_key, data_dir="data"):
-        """
-        初始化知识库
-        """
         self.api_key = api_key
         self.data_dir = data_dir
         self.vector_store = None
@@ -20,9 +17,6 @@ class CampusKnowledgeBase:
         load_sample_data(data_dir)
     
     def load_documents(self):
-        """
-        加载本地文档（支持.txt和.pdf格式）
-        """
         documents = []
         
         for filename in os.listdir(self.data_dir):
@@ -44,9 +38,6 @@ class CampusKnowledgeBase:
         return documents
     
     def build_vector_store(self):
-        """
-        构建向量数据库
-        """
         documents = self.load_documents()
         
         if not documents:
@@ -60,17 +51,17 @@ class CampusKnowledgeBase:
         
         splits = text_splitter.split_documents(documents)
         
-        embeddings = HuggingFaceEmbeddings(
-            model_name="all-MiniLM-L6-v2"
+        embeddings = OpenAIEmbeddings(
+            model="deepseek-embed",
+            api_key=self.api_key,
+            base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
         )
+        
         self.vector_store = FAISS.from_documents(splits, embeddings)
         
         return True
     
     def setup_qa_chain(self):
-        """
-        设置问答链
-        """
         if not self.vector_store:
             if not self.build_vector_store():
                 return False
@@ -117,9 +108,6 @@ class CampusKnowledgeBase:
         return True
     
     def query(self, question):
-        """
-        检索并回答问题
-        """
         if not self.qa_chain:
             if not self.setup_qa_chain():
                 return "知识库尚未加载，请先放入文档到data目录。"
@@ -128,16 +116,12 @@ class CampusKnowledgeBase:
             result = self.qa_chain({"query": question})
             
             answer = result.get("result", "")
-            sources = result.get("source_documents", [])
             
             return answer
         except Exception as e:
             return f"检索失败：{str(e)}"
 
 def load_sample_data(data_dir="data"):
-    """
-    生成示例校园指南数据
-    """
     os.makedirs(data_dir, exist_ok=True)
     
     sample_path = os.path.join(data_dir, "sample_guide.txt")
