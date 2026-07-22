@@ -4,244 +4,55 @@ import os
 import json
 import base64
 
-from tools.ics_tool import extract_tasks_from_text, generate_ics_file
-from tools.csv_tool import parse_expenses_from_text, generate_csv_file, generate_markdown_table
-from tools.wechat_tool import crawl_gduf_wechat, generate_articles_summary
-from rag.knowledge_base import CampusKnowledgeBase
-
-from langchain_openai import ChatOpenAI
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import StrOutputParser
-
 AVATAR_URL = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20beige%20vest%20white%20background%20cute%20style&image_size=square_hd"
 
+CAMPUSES = {
+    "校本部": {
+        "name": "校本部",
+        "location": "广州市天河区",
+        "description": "主校区，设施齐全，交通便利",
+        "icon": "🏫"
+    },
+    "肇庆校区": {
+        "name": "肇庆校区",
+        "location": "肇庆市端州区",
+        "description": "风景优美，学习氛围浓厚",
+        "icon": "🌳"
+    },
+    "清远校区": {
+        "name": "清远校区",
+        "location": "清远市清城区",
+        "description": "新校区，现代化设施",
+        "icon": "✨"
+    }
+}
+
+GRADES = ["2026级", "2025级", "2024级", "2023级", "其他"]
+
 def initialize_session_state():
-    """
-    初始化会话状态
-    """
+    if "user_campus" not in st.session_state:
+        st.session_state.user_campus = ""
+    if "user_gender" not in st.session_state:
+        st.session_state.user_gender = ""
+    if "user_grade" not in st.session_state:
+        st.session_state.user_grade = ""
     if "messages" not in st.session_state:
         st.session_state.messages = []
-    
     if "current_mode" not in st.session_state:
         st.session_state.current_mode = "干活模式"
-    
     if "knowledge_base" not in st.session_state:
         st.session_state.knowledge_base = None
-    
     if "last_tool_result" not in st.session_state:
         st.session_state.last_tool_result = None
 
 def get_deepseek_api_key():
-    """
-    获取DeepSeek API密钥
-    """
     load_dotenv()
     api_key = os.getenv("DEEPSEEK_API_KEY")
-    
     if not api_key:
         api_key = st.secrets.get("DEEPSEEK_API_KEY", "")
-    
     return api_key
 
-def save_tool_result(result):
-    """
-    保存工具执行结果到会话状态
-    """
-    st.session_state.last_tool_result = result
-
-@tool
-def generate_ics_calendar(text: str) -> str:
-    """
-    根据班群通知文本生成ICS日历文件
-    输入：包含任务和截止时间的通知文本
-    输出：任务列表的描述信息
-    """
-    api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    tasks = extract_tasks_from_text(text, api_key)
-    
-    if not tasks:
-        save_tool_result({"success": False, "type": "ics", "message": "未提取到任务信息"})
-        return "未从文本中提取到任务信息"
-    
-    filename = "gduf_tasks.ics"
-    generate_ics_file(tasks, filename)
-    
-    save_tool_result({
-        "success": True,
-        "type": "ics",
-        "filename": filename,
-        "tasks": tasks
-    })
-    
-    return f"成功提取 {len(tasks)} 个任务并生成日历文件"
-
-@tool
-def parse_expense_text(text: str) -> str:
-    """
-    解析消费记录文本并生成CSV文件
-    输入：包含消费记录的文本
-    输出：消费统计描述信息
-    """
-    api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    expenses = parse_expenses_from_text(text, api_key)
-    
-    if not expenses:
-        save_tool_result({"success": False, "type": "expense", "message": "未提取到消费记录"})
-        return "未从文本中提取到消费记录"
-    
-    filename = "gduf_expenses.csv"
-    generate_csv_file(expenses, filename)
-    markdown_table = generate_markdown_table(expenses)
-    
-    save_tool_result({
-        "success": True,
-        "type": "expense",
-        "filename": filename,
-        "expenses": expenses,
-        "markdown_table": markdown_table
-    })
-    
-    total = sum(e["amount"] for e in expenses)
-    return f"成功解析 {len(expenses)} 条消费记录，总计 {total:.2f} 元"
-
-@tool
-def search_wechat_articles(query: str) -> str:
-    """
-    搜索微信公众号文章获取最新资讯
-    输入：搜索关键词
-    输出：最新文章摘要信息
-    """
-    articles = crawl_gduf_wechat()
-    
-    if not articles:
-        return "暂未搜索到相关公众号文章"
-    
-    save_tool_result({
-        "success": True,
-        "type": "wechat",
-        "articles": articles
-    })
-    
-    return generate_articles_summary(articles)
-
-def handle_task_mode(user_input, api_key):
-    """
-    使用LangChain工具调用处理干活模式的用户输入
-    """
-    st.session_state.last_tool_result = None
-    
-    llm = ChatOpenAI(
-        temperature=0,
-        model="deepseek-chat",
-        api_key=api_key,
-        base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-    )
-    
-    tools = [generate_ics_calendar, parse_expense_text, search_wechat_articles]
-    llm_with_tools = llm.bind_tools(tools)
-    
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """你是广金万事屋师兄，一个具备工具调用能力的AI助手。
-        
-        你有以下工具可用：
-        1. generate_ics_calendar: 根据班群通知文本提取任务信息并生成日历文件。当用户输入包含任务名称、截止时间、地点等信息的通知文本时调用此工具。
-        2. parse_expense_text: 解析消费记录文本并生成CSV文件和统计表格。当用户输入包含消费日期、金额、描述等信息的文本时调用此工具。
-        3. search_wechat_articles: 搜索微信公众号文章获取广金最新资讯。当用户询问学校最新动态、新闻、通知等时调用此工具。
-        
-        请根据用户的需求，选择合适的工具进行调用。
-        如果用户的问题不属于上述三类，直接回答，不需要调用工具。
-        
-        回答时保持老学长的口吻，靠谱、不废话。"""),
-        ("human", "{input}"),
-    ])
-    
-    agent_chain = prompt | llm_with_tools | StrOutputParser()
-    
-    with st.status("🧠 万事屋师兄正在思考...", expanded=True) as status:
-        st.write("正在分析你的需求...")
-        
-        try:
-            result = agent_chain.invoke({"input": user_input})
-            
-            tool_result = st.session_state.last_tool_result
-            
-            if tool_result and tool_result.get("success"):
-                filename = tool_result.get("filename", "")
-                
-                if tool_result["type"] == "ics":
-                    tasks = tool_result["tasks"]
-                    task_list = "\n".join([f"- {t['name']}（截止：{t['deadline']}）" for t in tasks])
-                    
-                    with open(filename, "rb") as f:
-                        file_bytes = f.read()
-                    
-                    st.write("正在生成日历文件...")
-                    status.update(label="任务完成", state="complete", expanded=False)
-                    
-                    st.download_button(
-                        label="📥 下载日历文件 (.ics)",
-                        data=file_bytes,
-                        file_name=filename,
-                        mime="text/calendar"
-                    )
-                    
-                    return f"已帮你提取 {len(tasks)} 个任务：\n\n{task_list}\n\n点击上方按钮下载日历文件！"
-                
-                elif tool_result["type"] == "expense":
-                    st.write("正在生成账单表格...")
-                    status.update(label="任务完成", state="complete", expanded=False)
-                    
-                    st.markdown(tool_result.get("markdown_table", ""))
-                    
-                    with open(filename, "rb") as f:
-                        file_bytes = f.read()
-                    
-                    st.download_button(
-                        label="📥 导出CSV文件",
-                        data=file_bytes,
-                        file_name=filename,
-                        mime="text/csv"
-                    )
-                    
-                    return "消费记录已整理完成！以上是你的账单汇总，请点击按钮导出CSV文件。"
-                
-                elif tool_result["type"] == "wechat":
-                    st.write("正在整理公众号文章...")
-                    status.update(label="任务完成", state="complete", expanded=False)
-                    
-                    articles = tool_result.get("articles", [])
-                    for article in articles[:3]:
-                        with st.expander(f"📢 {article['title']}"):
-                            st.markdown(f"**日期**：{article['date']}")
-                            st.markdown(f"**摘要**：{article['summary']}")
-                            if article['link']:
-                                st.markdown(f"**原文链接**：[{article['link']}]({article['link']})")
-            
-            return result
-        
-        except Exception as e:
-            status.update(label="处理失败", state="error")
-            return f"处理过程中出现问题：{str(e)}"
-
-def handle_rag_mode(user_input, api_key):
-    """
-    处理生活向导模式的用户输入
-    """
-    if not st.session_state.knowledge_base:
-        with st.spinner("正在初始化知识库..."):
-            st.session_state.knowledge_base = CampusKnowledgeBase(api_key)
-            st.session_state.knowledge_base.setup_qa_chain()
-    
-    with st.spinner("正在检索知识库..."):
-        answer = st.session_state.knowledge_base.query(user_input)
-    
-    return answer
-
 def add_pwa_support():
-    """
-    添加 PWA 支持，使应用可以被添加到手机主屏幕
-    """
     manifest = {
         "name": "广金万事屋",
         "short_name": "广金万事屋",
@@ -252,22 +63,12 @@ def add_pwa_support():
         "theme_color": "#e74c3c",
         "orientation": "portrait",
         "icons": [
-            {
-                "src": AVATAR_URL,
-                "sizes": "192x192",
-                "type": "image/png"
-            },
-            {
-                "src": AVATAR_URL,
-                "sizes": "512x512",
-                "type": "image/png"
-            }
+            {"src": AVATAR_URL, "sizes": "192x192", "type": "image/png"},
+            {"src": AVATAR_URL, "sizes": "512x512", "type": "image/png"}
         ]
     }
-    
     manifest_str = json.dumps(manifest)
     manifest_b64 = base64.b64encode(manifest_str.encode()).decode('utf-8')
-    
     st.markdown(f"""
     <link rel="manifest" href="data:application/json;base64,{manifest_b64}">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -279,9 +80,6 @@ def add_pwa_support():
     """, unsafe_allow_html=True)
 
 def main():
-    """
-    主应用入口
-    """
     st.set_page_config(
         page_title="广金万事屋师兄",
         page_icon=AVATAR_URL,
@@ -294,35 +92,38 @@ def main():
     st.title("🎓 广金万事屋师兄")
     st.markdown("专为广东金融学院学生打造的智能助手")
     
+    if st.session_state.user_campus:
+        st.success(f"当前校区：{CAMPUSES[st.session_state.user_campus]['icon']} {st.session_state.user_campus}")
+    
     with st.sidebar:
-        st.header("模式切换")
-        mode = st.radio(
-            "选择工作模式",
-            ["干活模式", "生活向导模式"],
-            index=0 if st.session_state.current_mode == "干活模式" else 1
+        st.header("个人信息设置")
+        
+        campus = st.selectbox(
+            "选择校区",
+            [""] + list(CAMPUSES.keys()),
+            index=list(CAMPUSES.keys()).index(st.session_state.user_campus) + 1 if st.session_state.user_campus else 0,
+            placeholder="请选择你的校区"
         )
         
-        if mode != st.session_state.current_mode:
-            st.session_state.current_mode = mode
+        if campus != st.session_state.user_campus:
+            st.session_state.user_campus = campus
             st.session_state.messages = []
-            st.rerun()
         
-        st.divider()
+        gender = st.selectbox(
+            "选择性别",
+            ["", "男", "女"],
+            index=[0, 1, 2][["", "男", "女"].index(st.session_state.user_gender)] if st.session_state.user_gender else 0,
+            placeholder="请选择你的性别"
+        )
+        st.session_state.user_gender = gender
         
-        if st.session_state.current_mode == "干活模式":
-            st.info("**干活模式**：处理班群通知生成日历，解析消费记录生成账单，获取公众号资讯")
-            st.markdown("""
-            📅 **DDL收割机**：输入班群通知，自动提取任务和截止时间，生成日历文件
-            📊 **账单流水**：输入消费记录，自动分类汇总，生成表格和CSV
-            📰 **校园资讯**：获取广金相关公众号最新文章和通知
-            """)
-        else:
-            st.info("**生活向导模式**：基于广金知识库回答校园问题")
-            st.markdown("""
-            🗺️ **路线查询**：问我校园路线
-            📞 **服务查询**：问我报修电话等生活信息
-            💡 **避坑建议**：获取学长的实用建议
-            """)
+        grade = st.selectbox(
+            "选择年级",
+            [""] + GRADES,
+            index=GRADES.index(st.session_state.user_grade) + 1 if st.session_state.user_grade else 0,
+            placeholder="请选择你的年级"
+        )
+        st.session_state.user_grade = grade
         
         st.divider()
         
@@ -337,35 +138,54 @@ def main():
             os.environ["DEEPSEEK_API_KEY"] = api_key_input
             os.environ["DEEPSEEK_BASE_URL"] = "https://api.deepseek.com/v1"
     
-    for message in st.session_state.messages:
-        avatar = AVATAR_URL if message["role"] == "assistant" else None
-        with st.chat_message(message["role"], avatar=avatar):
-            st.markdown(message["content"])
-    
-    if prompt := st.chat_input("请输入你的问题..."):
-        api_key = api_key_input if api_key_input else get_deepseek_api_key()
+    if st.session_state.user_campus:
+        st.markdown("---")
+        st.subheader("校区特色")
+        campus_info = CAMPUSES[st.session_state.user_campus]
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"{campus_info['icon']} **{campus_info['name']}**")
+        with col2:
+            st.info(f"📍 {campus_info['location']}")
+        with col3:
+            st.info(f"💡 {campus_info['description']}")
         
-        if not api_key:
-            st.error("请先在侧边栏输入你的DeepSeek API Key！")
-            return
+        st.markdown(f"""
+        你已选择 **{campus_info['icon']} {campus_info['name']}**，点击左侧导航栏进入对应校区页面开始使用！
         
-        os.environ["DEEPSEEK_API_KEY"] = api_key
-        os.environ["DEEPSEEK_BASE_URL"] = "https://api.deepseek.com/v1"
+        当前身份：
+        - 校区：{st.session_state.user_campus}
+        - 性别：{st.session_state.user_gender if st.session_state.user_gender else '未设置'}
+        - 年级：{st.session_state.user_grade if st.session_state.user_grade else '未设置'}
+        """)
+    else:
+        st.markdown("---")
+        st.subheader("🏛️ 选择你的校区")
+        col1, col2, col3 = st.columns(3)
         
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        with col1:
+            if st.button("🏫 校本部", use_container_width=True):
+                st.session_state.user_campus = "校本部"
+                st.rerun()
         
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        with col2:
+            if st.button("🌳 肇庆校区", use_container_width=True):
+                st.session_state.user_campus = "肇庆校区"
+                st.rerun()
         
-        with st.chat_message("assistant", avatar=AVATAR_URL):
-            if st.session_state.current_mode == "干活模式":
-                response = handle_task_mode(prompt, api_key)
-            else:
-                response = handle_rag_mode(prompt, api_key)
-            
-            st.markdown(response)
+        with col3:
+            if st.button("✨ 清远校区", use_container_width=True):
+                st.session_state.user_campus = "清远校区"
+                st.rerun()
         
-        st.session_state.messages.append({"role": "assistant", "content": response, "avatar": AVATAR_URL})
+        st.markdown("""
+        请先选择你的校区，以便获取个性化的校园服务。
+        
+        **校区介绍：**
+        - 🏫 **校本部**：位于广州市天河区，是学校的主校区，拥有最完善的教学设施和浓厚的学术氛围。
+        - 🌳 **肇庆校区**：位于肇庆市端州区，环境优美，适合静心学习。
+        - ✨ **清远校区**：位于清远市清城区，是新建校区，设施现代化。
+        """)
 
 if __name__ == "__main__":
     main()
