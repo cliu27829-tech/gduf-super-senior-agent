@@ -13,7 +13,7 @@ from rag.knowledge_base import CampusKnowledgeBase
 AVATAR_URL = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20beige%20vest%20white%20background%20cute%20style&image_size=square_hd"
 
 SYSTEM_PROMPT = f"""你是广东金融学院肇庆校区的刘晨曦师兄。在回答学弟学妹的问题时，请严格遵循以下知识调取优先级：
-1. 【优先】：如果传入了《好人师兄》本地资料，必须优先严格基于本地资料精准回答；
+1. 【优先】：如果传入了《好人师兄》本地资料，必须优先严格基于本地资料精准回答。请通读所有提供的参考资料后再作答，不要只看第一篇就急于回答，确保信息完整；
 2. 【补充】：如果本地资料未提及，请结合【联网搜索结果】进行回答，并说明信息来自网络；
 3. 【兜底】：如果本地和联网均未搜到，允许使用你的通用知识进行解答，并在回答末尾使用引用框提示：
    '> 💡 晨曦师兄提示：以上信息基于通用常识推断，具体建议向学校官方确认。'
@@ -125,11 +125,11 @@ def build_hybrid_context(user_input):
     has_local = False
     has_web = False
 
-    # 步骤一：本地知识库检索
+    # 步骤一：本地知识库检索（取 top 4 提高覆盖率）
     local_docs = load_local_knowledge()
     kb_context = ""
     if local_docs:
-        results = search_knowledge(user_input, local_docs, top_n=2)
+        results = search_knowledge(user_input, local_docs, top_n=4)
         if results:
             kb_context = build_knowledge_context(results)
             context_parts.append(f"[本地知识库参考]\n{kb_context}")
@@ -268,13 +268,33 @@ def handle_task_mode(user_input, api_key):
             return f"处理过程中出现问题：{str(e)}"
 
 def handle_rag_mode(user_input, api_key):
-    if not st.session_state.knowledge_base:
-        with st.spinner("正在初始化知识库..."):
-            st.session_state.knowledge_base = CampusKnowledgeBase(api_key)
-            st.session_state.knowledge_base.setup_qa_chain()
-    with st.spinner("正在检索知识库..."):
-        answer = st.session_state.knowledge_base.query(user_input)
-    return answer
+    # 生活向导模式也使用三层混合检索（与干活模式相同的检索管道）
+    with st.status("🔍 正在检索相关信息...", expanded=True) as status:
+        st.write("步骤1/3：正在检索本地知识库（好人师兄）...")
+        context, has_local, has_web = build_hybrid_context(user_input)
+        if has_local:
+            st.write("✅ 本地知识库匹配成功")
+        else:
+            st.write("⚠️  本地知识库未找到高匹配内容")
+
+        if not has_local or need_web_search(user_input):
+            st.write("步骤2/3：正在进行网络实时搜索...")
+        if has_web:
+            st.write("✅ 网络搜索完成")
+        elif not has_local:
+            st.write("步骤3/3：本地和网络均未找到，将使用通用知识解答")
+
+        status.update(label="检索完成", state="complete", expanded=False)
+
+    messages = build_messages_for_api(user_input, context)
+
+    with st.spinner("🧠 万事屋师兄正在思考..."):
+        try:
+            response = call_deepseek_api(messages, api_key, stream=False)
+            answer = response.choices[0].message.content
+            return answer
+        except Exception as e:
+            return f"处理过程中出现问题：{str(e)}"
 
 def main():
     st.set_page_config(
