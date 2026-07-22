@@ -12,7 +12,12 @@ from rag.knowledge_base import CampusKnowledgeBase
 
 AVATAR_URL = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20beige%20vest%20white%20background%20cute%20style&image_size=square_hd"
 
-SYSTEM_PROMPT = f"""你是广东金融学院清远校区的刘晨曦师兄，常驻清远校区。严禁自称是龙洞校区或其他校区的学生。如果遇到你不清楚的清远校区具体数据（如学院数量、专业设置、路线等），必须调用搜索工具，绝不能胡编乱造或找借口。
+SYSTEM_PROMPT = f"""你是广东金融学院清远校区的刘晨曦师兄。在回答学弟学妹的问题时，请严格遵循以下知识调取优先级：
+1. 【优先】：如果传入了《好人师兄》本地资料，必须优先严格基于本地资料精准回答；
+2. 【补充】：如果本地资料未提及，请结合【联网搜索结果】进行回答，并说明信息来自网络；
+3. 【兜底】：如果本地和联网均未搜到，允许使用你的通用知识进行解答，并在回答末尾使用引用框提示：
+   '> 💡 晨曦师兄提示：以上信息基于通用常识推断，具体建议向学校官方确认。'
+严禁在未尝试其他途径时轻易回答'不知道'。
 
 用户信息：
 - 校区：清远校区（清远市清城区）
@@ -27,7 +32,6 @@ SYSTEM_PROMPT = f"""你是广东金融学院清远校区的刘晨曦师兄，常
 人设约束（必须严格遵守）：
 - 你的名字是刘晨曦，你是广东金融学院清远校区的师兄，常驻清远校区。
 - 严禁自称是龙洞校区、校本部、肇庆校区或其他校区的学生。
-- 如果遇到你不清楚的清远校区具体数据（如学院数量、专业设置、路线、电话等），必须告知用户你不确定，并建议查看官网或调用搜索工具，绝不能胡编乱造或找借口。
 
 回答时保持老学长的口吻，靠谱、不废话。涉及校园问题时优先考虑清远校区的情况。"""
 
@@ -116,29 +120,57 @@ def search_wechat_articles(query: str) -> str:
     })
     return generate_articles_summary(articles)
 
-def build_messages_for_api(user_input, search_context=""):
-    messages = []
-    system_content = SYSTEM_PROMPT
-    if search_context:
-        system_content += search_context
+def build_hybrid_context(user_input):
+    """
+    三层降级混合检索：
+    1. 本地知识库（好人师兄）→ 标记为 [本地知识库参考]
+    2. 网络实时搜索 → 标记为 [网络实时搜索结果]
+    3. 通用知识兜底 → 不传上下文
+    返回构建好的 context 字符串，以及是否有参考资料的标记
+    """
+    context_parts = []
+    has_local = False
+    has_web = False
 
-    # 加载本地知识库并检索相关文章
+    # 步骤一：本地知识库检索
     local_docs = load_local_knowledge()
     kb_context = ""
     if local_docs:
         results = search_knowledge(user_input, local_docs, top_n=2)
         if results:
             kb_context = build_knowledge_context(results)
-            system_content += "\n\n请严格根据<参考资料>中的内容回答广金校区相关问题，如果参考资料中没有提及，请回答不知道。"
+            context_parts.append(f"[本地知识库参考]\n{kb_context}")
+            has_local = True
+
+    # 步骤二：判断是否需要网络搜索
+    # 触发条件：本地未找到高匹配内容，或包含搜索关键词
+    need_web = need_web_search(user_input) or not has_local
+
+    web_context = ""
+    if need_web:
+        search_query = f"广东金融学院 清远校区 {user_input}"
+        search_results = web_search(search_query)
+        if search_results:
+            web_context = build_search_context(search_results)
+            context_parts.append(f"[网络实时搜索结果]\n{web_context}")
+            has_web = True
+
+    # 合并上下文
+    final_context = "\n\n".join(context_parts)
+    return final_context, has_local, has_web
+
+def build_messages_for_api(user_input, context=""):
+    messages = []
+    system_content = SYSTEM_PROMPT
 
     messages.append({"role": "system", "content": system_content})
     for msg in st.session_state.messages:
         if msg["role"] in ["user", "assistant"]:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # 如果找到本地知识，将参考资料拼接到用户提问前
-    if kb_context:
-        final_user_input = f"{kb_context}\n请严格根据以下参考资料回答广金校区相关问题，如果没有提及，请回答不知道。\n\n用户问题：{user_input}"
+    # 如果有上下文，拼接到用户提问前
+    if context:
+        final_user_input = f"{context}\n\n用户问题：{user_input}"
     else:
         final_user_input = user_input
 
@@ -162,17 +194,26 @@ def call_deepseek_api(messages, api_key, stream=True):
 
 def handle_task_mode(user_input, api_key):
     st.session_state.last_tool_result = None
-    
-    search_context = ""
-    if need_web_search(user_input):
-        with st.status("🌐 万事屋师兄正在全网检索最新信息...", expanded=True) as search_status:
-            st.write("正在搜索网络获取最新资讯...")
-            search_query = f"广东金融学院 清远校区 {user_input}"
-            search_results = web_search(search_query)
-            search_context = build_search_context(search_results)
-            search_status.update(label="检索完成", state="complete", expanded=False)
-    
-    messages = build_messages_for_api(user_input, search_context)
+
+    # 三层降级混合检索
+    with st.status("🔍 正在检索相关信息...", expanded=True) as status:
+        st.write("步骤1/3：正在检索本地知识库（好人师兄）...")
+        context, has_local, has_web = build_hybrid_context(user_input)
+        if has_local:
+            st.write("✅ 本地知识库匹配成功")
+        else:
+            st.write("⚠️  本地知识库未找到高匹配内容")
+
+        if not has_local or need_web_search(user_input):
+            st.write("步骤2/3：正在进行网络实时搜索...")
+        if has_web:
+            st.write("✅ 网络搜索完成")
+        elif not has_local:
+            st.write("步骤3/3：本地和网络均未找到，将使用通用知识解答")
+
+        status.update(label="检索完成", state="complete", expanded=False)
+
+    messages = build_messages_for_api(user_input, context)
     
     with st.status("🧠 万事屋师兄正在思考...", expanded=True) as status:
         st.write("正在分析你的需求...")
