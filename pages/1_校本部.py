@@ -288,6 +288,18 @@ def main():
         
         if api_key_input:
             os.environ["DEEPSEEK_API_KEY"] = api_key_input
+        
+        st.divider()
+        
+        st.header("数据更新")
+        if st.button("🔄 手动更新知识库"):
+            with st.spinner("正在从官网获取最新信息..."):
+                if st.session_state.knowledge_base:
+                    success, message = st.session_state.knowledge_base.manual_update()
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
     
     for message in st.session_state.messages:
         avatar = AVATAR_URL if message["role"] == "assistant" else None

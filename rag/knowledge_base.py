@@ -7,6 +7,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 import os
+import time
 
 class CampusKnowledgeBase:
     def __init__(self, api_key, data_dir="data"):
@@ -14,8 +15,11 @@ class CampusKnowledgeBase:
         self.data_dir = data_dir
         self.vector_store = None
         self.qa_chain = None
+        self.last_update_time = 0
+        self.update_interval = 3600
         
         load_sample_data(data_dir)
+        self.auto_update_campus_data()
     
     def load_documents(self):
         documents = []
@@ -107,7 +111,33 @@ class CampusKnowledgeBase:
         
         return True
     
+    def auto_update_campus_data(self):
+        try:
+            from tools.gduf_spider import update_knowledge_base as spider_update
+            current_time = time.time()
+            if current_time - self.last_update_time > self.update_interval:
+                spider_update(self.data_dir)
+                self.last_update_time = current_time
+                if self.vector_store:
+                    self.build_vector_store()
+                    self.setup_qa_chain()
+        except Exception as e:
+            print(f"Auto update failed: {e}")
+    
+    def manual_update(self):
+        try:
+            from tools.gduf_spider import update_knowledge_base as spider_update
+            spider_update(self.data_dir)
+            self.last_update_time = time.time()
+            self.build_vector_store()
+            self.setup_qa_chain()
+            return True, "知识库更新成功！"
+        except Exception as e:
+            return False, f"更新失败：{str(e)}"
+    
     def query(self, question):
+        self.auto_update_campus_data()
+        
         if not self.qa_chain:
             if not self.setup_qa_chain():
                 return "知识库尚未加载，请先放入文档到data目录。"
