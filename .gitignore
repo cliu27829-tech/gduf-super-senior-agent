@@ -15,3 +15,22 @@ data/*.pdf
 data/*.txt
 !data/sample_guide.txt
 unimate/
+
+# 好人师兄文件夹：只推送 .md 和 .txt 文件，排除大文件
+好人师兄/*.mhtml
+好人师兄/*.docx
+好人师兄/*.pdf
+好人师兄/*.html
+好人师兄/*.jpg
+好人师兄/*.png
+好人师兄/*.jpeg
+好人师兄/*.gif
+好人师兄/**/*.mp4
+好人师兄/**/*.mhtml
+好人师兄/**/*.docx
+好人师兄/**/*.pdf
+好人师兄/**/*.html
+好人师兄/**/*.jpg
+好人师兄/**/*.png
+好人师兄/**/*.jpeg
+好人师兄/**/*.gif

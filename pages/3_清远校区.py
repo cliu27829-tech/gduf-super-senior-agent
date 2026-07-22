@@ -7,11 +7,12 @@ from duckduckgo_search import DDGS
 from tools.ics_tool import extract_tasks_from_text, generate_ics_file
 from tools.csv_tool import parse_expenses_from_text, generate_csv_file, generate_markdown_table
 from tools.wechat_tool import crawl_gduf_wechat, generate_articles_summary
+from tools.local_knowledge import load_local_knowledge, search_knowledge, build_knowledge_context
 from rag.knowledge_base import CampusKnowledgeBase
 
 AVATAR_URL = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20beige%20vest%20white%20background%20cute%20style&image_size=square_hd"
 
-SYSTEM_PROMPT = f"""你是广金万事屋师兄（清远校区版），一个具备工具调用能力的AI助手。
+SYSTEM_PROMPT = f"""你是广东金融学院清远校区的刘晨曦师兄，常驻清远校区。严禁自称是龙洞校区或其他校区的学生。如果遇到你不清楚的清远校区具体数据（如学院数量、专业设置、路线等），必须调用搜索工具，绝不能胡编乱造或找借口。
 
 用户信息：
 - 校区：清远校区（清远市清城区）
@@ -23,9 +24,17 @@ SYSTEM_PROMPT = f"""你是广金万事屋师兄（清远校区版），一个具
 2. parse_expense_text: 解析消费记录文本并生成CSV文件和统计表格
 3. search_wechat_articles: 搜索微信公众号文章获取广金最新资讯
 
+人设约束（必须严格遵守）：
+- 你的名字是刘晨曦，你是广东金融学院清远校区的师兄，常驻清远校区。
+- 严禁自称是龙洞校区、校本部、肇庆校区或其他校区的学生。
+- 如果遇到你不清楚的清远校区具体数据（如学院数量、专业设置、路线、电话等），必须告知用户你不确定，并建议查看官网或调用搜索工具，绝不能胡编乱造或找借口。
+
 回答时保持老学长的口吻，靠谱、不废话。涉及校园问题时优先考虑清远校区的情况。"""
 
-SEARCH_KEYWORDS = ["最新", "2026年", "2026", "当前", "通知", "公告", "新闻", "动态", "现在", "今天", "近期", "最近", "什么时候", "何时"]
+SEARCH_KEYWORDS = [
+    "最新", "2026年", "2026", "当前", "通知", "公告", "新闻", "动态", "现在", "今天", "近期", "最近", "什么时候", "何时",
+    "清远校区", "多少个学院", "学院", "专业", "在哪", "怎么走", "官网", "指南", "电话", "地址", "路线", "几栋", "几号楼", "哪里", "位置"
+]
 
 def save_tool_result(result):
     st.session_state.last_tool_result = result
@@ -112,11 +121,28 @@ def build_messages_for_api(user_input, search_context=""):
     system_content = SYSTEM_PROMPT
     if search_context:
         system_content += search_context
+
+    # 加载本地知识库并检索相关文章
+    local_docs = load_local_knowledge()
+    kb_context = ""
+    if local_docs:
+        results = search_knowledge(user_input, local_docs, top_n=2)
+        if results:
+            kb_context = build_knowledge_context(results)
+            system_content += "\n\n请严格根据<参考资料>中的内容回答广金校区相关问题，如果参考资料中没有提及，请回答不知道。"
+
     messages.append({"role": "system", "content": system_content})
     for msg in st.session_state.messages:
         if msg["role"] in ["user", "assistant"]:
             messages.append({"role": msg["role"], "content": msg["content"]})
-    messages.append({"role": "user", "content": user_input})
+
+    # 如果找到本地知识，将参考资料拼接到用户提问前
+    if kb_context:
+        final_user_input = f"{kb_context}\n请严格根据以下参考资料回答广金校区相关问题，如果没有提及，请回答不知道。\n\n用户问题：{user_input}"
+    else:
+        final_user_input = user_input
+
+    messages.append({"role": "user", "content": final_user_input})
     return messages
 
 def call_deepseek_api(messages, api_key, stream=True):
@@ -141,7 +167,8 @@ def handle_task_mode(user_input, api_key):
     if need_web_search(user_input):
         with st.status("🌐 万事屋师兄正在全网检索最新信息...", expanded=True) as search_status:
             st.write("正在搜索网络获取最新资讯...")
-            search_results = web_search(user_input + " 广东金融学院")
+            search_query = f"广东金融学院 清远校区 {user_input}"
+            search_results = web_search(search_query)
             search_context = build_search_context(search_results)
             search_status.update(label="检索完成", state="complete", expanded=False)
     
@@ -290,7 +317,7 @@ def main():
             os.environ["DEEPSEEK_API_KEY"] = api_key_input
         
         st.divider()
-        
+
         st.header("数据更新")
         if st.button("🔄 手动更新知识库"):
             with st.spinner("正在从官网获取最新信息..."):
@@ -300,6 +327,15 @@ def main():
                         st.success(message)
                     else:
                         st.error(message)
+
+        st.divider()
+
+        st.header("本地知识库")
+        local_docs = load_local_knowledge()
+        st.info(f"📚 已加载 {len(local_docs)} 篇文章")
+        if st.button("🔄 刷新本地知识库缓存"):
+            st.cache_data.clear()
+            st.rerun()
     
     for message in st.session_state.messages:
         avatar = AVATAR_URL if message["role"] == "assistant" else None
