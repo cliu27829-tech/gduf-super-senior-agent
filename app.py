@@ -11,19 +11,22 @@ CAMPUSES = {
         "name": "校本部",
         "location": "广州市天河区",
         "description": "主校区，设施齐全，交通便利",
-        "icon": "🏫"
+        "icon": "🏫",
+        "page": "pages/1_校本部.py"
     },
     "肇庆校区": {
         "name": "肇庆校区",
         "location": "肇庆市端州区",
         "description": "风景优美，学习氛围浓厚",
-        "icon": "🌳"
+        "icon": "🌳",
+        "page": "pages/2_肇庆校区.py"
     },
     "清远校区": {
         "name": "清远校区",
         "location": "清远市清城区",
         "description": "新校区，现代化设施",
-        "icon": "✨"
+        "icon": "✨",
+        "page": "pages/3_清远校区.py"
     }
 }
 
@@ -89,12 +92,6 @@ def main():
     add_pwa_support()
     initialize_session_state()
     
-    st.title("🎓 广金万事屋师兄")
-    st.markdown("专为广东金融学院学生打造的智能助手")
-    
-    if st.session_state.user_campus:
-        st.success(f"当前校区：{CAMPUSES[st.session_state.user_campus]['icon']} {st.session_state.user_campus}")
-    
     with st.sidebar:
         st.header("个人信息设置")
         
@@ -105,7 +102,7 @@ def main():
             placeholder="请选择你的校区"
         )
         
-        if campus != st.session_state.user_campus:
+        if campus != st.session_state.user_campus and campus:
             st.session_state.user_campus = campus
             st.session_state.messages = []
         
@@ -139,53 +136,47 @@ def main():
             os.environ["DEEPSEEK_BASE_URL"] = "https://api.deepseek.com/v1"
     
     if st.session_state.user_campus:
-        st.markdown("---")
-        st.subheader("校区特色")
-        campus_info = CAMPUSES[st.session_state.user_campus]
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.info(f"{campus_info['icon']} **{campus_info['name']}**")
-        with col2:
-            st.info(f"📍 {campus_info['location']}")
-        with col3:
-            st.info(f"💡 {campus_info['description']}")
-        
-        st.markdown(f"""
-        你已选择 **{campus_info['icon']} {campus_info['name']}**，点击左侧导航栏进入对应校区页面开始使用！
-        
-        当前身份：
-        - 校区：{st.session_state.user_campus}
-        - 性别：{st.session_state.user_gender if st.session_state.user_gender else '未设置'}
-        - 年级：{st.session_state.user_grade if st.session_state.user_grade else '未设置'}
-        """)
-    else:
-        st.markdown("---")
-        st.subheader("🏛️ 选择你的校区")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("🏫 校本部", use_container_width=True):
-                st.session_state.user_campus = "校本部"
-                st.rerun()
-        
-        with col2:
-            if st.button("🌳 肇庆校区", use_container_width=True):
-                st.session_state.user_campus = "肇庆校区"
-                st.rerun()
-        
-        with col3:
-            if st.button("✨ 清远校区", use_container_width=True):
-                st.session_state.user_campus = "清远校区"
-                st.rerun()
-        
-        st.markdown("""
-        请先选择你的校区，以便获取个性化的校园服务。
-        
-        **校区介绍：**
-        - 🏫 **校本部**：位于广州市天河区，是学校的主校区，拥有最完善的教学设施和浓厚的学术氛围。
-        - 🌳 **肇庆校区**：位于肇庆市端州区，环境优美，适合静心学习。
-        - ✨ **清远校区**：位于清远市清城区，是新建校区，设施现代化。
-        """)
+        campus_page = CAMPUSES[st.session_state.user_campus]["page"]
+        try:
+            st.switch_page(campus_page)
+        except Exception as e:
+            st.error(f"跳转失败：{str(e)}")
+            st.write("请点击左侧导航栏进入对应校区页面")
+        return
+    
+    st.title("🎓 广金万事屋师兄")
+    st.markdown("专为广东金融学院学生打造的智能助手")
+    
+    st.markdown("---")
+    st.subheader("🏛️ 选择你的校区")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🏫 校本部", use_container_width=True):
+            st.session_state.user_campus = "校本部"
+            st.session_state.messages = []
+            st.switch_page("pages/1_校本部.py")
+    
+    with col2:
+        if st.button("🌳 肇庆校区", use_container_width=True):
+            st.session_state.user_campus = "肇庆校区"
+            st.session_state.messages = []
+            st.switch_page("pages/2_肇庆校区.py")
+    
+    with col3:
+        if st.button("✨ 清远校区", use_container_width=True):
+            st.session_state.user_campus = "清远校区"
+            st.session_state.messages = []
+            st.switch_page("pages/3_清远校区.py")
+    
+    st.markdown("""
+    请先选择你的校区，以便获取个性化的校园服务。
+    
+    **校区介绍：**
+    - 🏫 **校本部**：位于广州市天河区，是学校的主校区，拥有最完善的教学设施和浓厚的学术氛围。
+    - 🌳 **肇庆校区**：位于肇庆市端州区，环境优美，适合静心学习。
+    - ✨ **清远校区**：位于清远市清城区，是新建校区，设施现代化。
+    """)
 
 if __name__ == "__main__":
     main()
