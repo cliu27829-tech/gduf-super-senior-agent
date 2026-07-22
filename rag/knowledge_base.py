@@ -2,9 +2,10 @@ from langchain_community.document_loaders import TextLoader, PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import FakeEmbeddings
-from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 import os
 
 class CampusKnowledgeBase:
@@ -92,12 +93,16 @@ class CampusKnowledgeBase:
             input_variables=["context", "question"]
         )
         
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=self.vector_store.as_retriever(k=3),
-            chain_type_kwargs={"prompt": prompt},
-            return_source_documents=True
+        retriever = self.vector_store.as_retriever(k=3)
+        
+        def format_docs(docs):
+            return "\n\n".join(doc.page_content for doc in docs)
+        
+        self.qa_chain = (
+            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            | prompt
+            | llm
+            | StrOutputParser()
         )
         
         return True
@@ -108,10 +113,7 @@ class CampusKnowledgeBase:
                 return "知识库尚未加载，请先放入文档到data目录。"
         
         try:
-            result = self.qa_chain({"query": question})
-            
-            answer = result.get("result", "")
-            
+            answer = self.qa_chain.invoke(question)
             return answer
         except Exception as e:
             return f"检索失败：{str(e)}"

@@ -4,19 +4,25 @@ import uuid
 import re
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StructuredOutputParser, ResponseSchema
+from langchain_core.output_parsers import JsonOutputParser
+from pydantic import BaseModel, Field
+from typing import List
 import os
+
+class Task(BaseModel):
+    name: str = Field(description="任务名称")
+    deadline: str = Field(description="截止时间，格式YYYY-MM-DD HH:MM")
+    location: str = Field(description="地点/备注")
+
+class TaskList(BaseModel):
+    tasks: List[Task] = Field(description="任务列表")
 
 def extract_tasks_from_text(text, openai_api_key):
     """
     使用LLM从班群通知文本中提取任务信息
     返回包含任务名称、截止时间、地点/备注的列表
     """
-    response_schemas = [
-        ResponseSchema(name="tasks", description="任务列表，每个任务包含name（任务名称）、deadline（截止时间，格式YYYY-MM-DD HH:MM）、location（地点/备注）")
-    ]
-    
-    output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
+    output_parser = JsonOutputParser(pydantic_object=TaskList)
     format_instructions = output_parser.get_format_instructions()
     
     prompt = ChatPromptTemplate.from_messages([
@@ -34,7 +40,7 @@ def extract_tasks_from_text(text, openai_api_key):
     
     try:
         result = chain.invoke({"text": text, "format_instructions": format_instructions})
-        return result.get("tasks", [])
+        return [t.dict() for t in result.tasks]
     except Exception as e:
         return extract_tasks_fallback(text)
 

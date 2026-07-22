@@ -9,8 +9,8 @@ from rag.knowledge_base import CampusKnowledgeBase
 
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
-from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.output_parsers import StrOutputParser
 
 def initialize_session_state():
     """
@@ -24,9 +24,6 @@ def initialize_session_state():
     
     if "knowledge_base" not in st.session_state:
         st.session_state.knowledge_base = None
-    
-    if "agent_executor" not in st.session_state:
-        st.session_state.agent_executor = None
     
     if "last_tool_result" not in st.session_state:
         st.session_state.last_tool_result = None
@@ -104,10 +101,12 @@ def parse_expense_text(text: str) -> str:
     total = sum(e["amount"] for e in expenses)
     return f"成功解析 {len(expenses)} 条消费记录，总计 {total:.2f} 元"
 
-def create_agent(api_key):
+def handle_task_mode(user_input, api_key):
     """
-    创建LangChain Agent，具备工具调用能力（使用DeepSeek API）
+    使用LangChain工具调用处理干活模式的用户输入
     """
+    st.session_state.last_tool_result = None
+    
     llm = ChatOpenAI(
         temperature=0,
         model="deepseek-chat",
@@ -116,6 +115,7 @@ def create_agent(api_key):
     )
     
     tools = [generate_ics_calendar, parse_expense_text]
+    llm_with_tools = llm.bind_tools(tools)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", """你是广金万事屋师兄，一个具备工具调用能力的AI助手。
@@ -128,33 +128,17 @@ def create_agent(api_key):
         如果用户的问题不属于上述两类，直接回答，不需要调用工具。
         
         回答时保持老学长的口吻，靠谱、不废话。"""),
-        MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
     
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    return AgentExecutor(agent=agent, tools=tools, verbose=True)
-
-def handle_task_mode(user_input, api_key):
-    """
-    使用LangChain Agent处理干活模式的用户输入
-    """
-    st.session_state.last_tool_result = None
-    
-    if not st.session_state.agent_executor:
-        st.session_state.agent_executor = create_agent(api_key)
+    agent_chain = prompt | llm_with_tools | StrOutputParser()
     
     with st.status("🧠 万事屋师兄正在思考...", expanded=True) as status:
         st.write("正在分析你的需求...")
         
         try:
-            result = st.session_state.agent_executor.invoke({
-                "input": user_input,
-                "chat_history": []
-            })
+            result = agent_chain.invoke({"input": user_input})
             
-            output = result.get("output", "")
             tool_result = st.session_state.last_tool_result
             
             if tool_result and tool_result.get("success"):
@@ -197,7 +181,7 @@ def handle_task_mode(user_input, api_key):
                     
                     return "消费记录已整理完成！以上是你的账单汇总，请点击按钮导出CSV文件。"
             
-            return output
+            return result
         
         except Exception as e:
             status.update(label="处理失败", state="error")
@@ -257,7 +241,6 @@ def main():
         if mode != st.session_state.current_mode:
             st.session_state.current_mode = mode
             st.session_state.messages = []
-            st.session_state.agent_executor = None
             st.rerun()
         
         st.divider()

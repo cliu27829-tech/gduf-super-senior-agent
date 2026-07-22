@@ -3,17 +3,24 @@ import pandas as pd
 import os
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StructuredOutputParser, ResponseSchema
+from langchain_core.output_parsers import JsonOutputParser
+from pydantic import BaseModel, Field
+from typing import List
+
+class Expense(BaseModel):
+    date: str = Field(description="日期，格式YYYY-MM-DD")
+    category: str = Field(description="分类：餐饮/交通/购物/娱乐/学习/其他")
+    description: str = Field(description="消费描述")
+    amount: float = Field(description="金额，数字")
+
+class ExpenseList(BaseModel):
+    expenses: List[Expense] = Field(description="消费记录列表")
 
 def parse_expenses_from_text(text, openai_api_key):
     """
     使用LLM从消费记录文本中解析并分类汇总
     """
-    response_schemas = [
-        ResponseSchema(name="expenses", description="消费记录列表，每个记录包含date（日期，格式YYYY-MM-DD）、category（分类：餐饮/交通/购物/娱乐/学习/其他）、description（消费描述）、amount（金额，数字）")
-    ]
-    
-    output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
+    output_parser = JsonOutputParser(pydantic_object=ExpenseList)
     format_instructions = output_parser.get_format_instructions()
     
     prompt = ChatPromptTemplate.from_messages([
@@ -31,7 +38,7 @@ def parse_expenses_from_text(text, openai_api_key):
     
     try:
         result = chain.invoke({"text": text, "format_instructions": format_instructions})
-        return result.get("expenses", [])
+        return [e.dict() for e in result.expenses]
     except Exception as e:
         return parse_expenses_fallback(text)
 
