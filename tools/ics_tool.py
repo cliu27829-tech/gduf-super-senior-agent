@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 import uuid
 import re
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import StructuredOutputParser, ResponseSchema
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StructuredOutputParser, ResponseSchema
 import os
 
 def extract_tasks_from_text(text, openai_api_key):

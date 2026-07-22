@@ -8,7 +8,7 @@ from tools.csv_tool import parse_expenses_from_text, generate_csv_file, generate
 from rag.knowledge_base import CampusKnowledgeBase
 
 from langchain_openai import ChatOpenAI
-from langchain.tools import tool
+from langchain_core.tools import tool
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 

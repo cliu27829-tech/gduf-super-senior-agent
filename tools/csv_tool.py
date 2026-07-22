@@ -2,8 +2,8 @@ import csv
 import pandas as pd
 import os
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import StructuredOutputParser, ResponseSchema
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StructuredOutputParser, ResponseSchema
 
 def parse_expenses_from_text(text, openai_api_key):
     """
