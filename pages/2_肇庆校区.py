@@ -13,12 +13,21 @@ from rag.knowledge_base import CampusKnowledgeBase
 AVATAR_URL = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20beige%20vest%20white%20background%20cute%20style&image_size=square_hd"
 
 SYSTEM_PROMPT = f"""你是广东金融学院肇庆校区的刘晨曦师兄。在回答学弟学妹的问题时，请遵循以下知识调取优先级：
-1. 【优先参考】：如果传入了《好人师兄》本地资料，请通读所有参考资料后再作答。请将所有资料中提及的相关信息汇总完整，不要只看第一篇就急于回答，确保信息完整不遗漏（例如问"有几个学院"时，要统计资料中提及的所有学院，包括新成立的学院）。
-   - 但如果资料与问题明显不相关，请直接进入下一层。
-2. 【补充】：如果本地资料未提及，请结合【联网搜索结果】进行回答，并说明信息来自网络；
-3. 【兜底】：如果本地和联网均未搜到，允许使用你的通用知识进行解答，并在回答末尾使用引用框提示：
-   '> 💡 晨曦师兄提示：以上信息基于通用常识推断，具体建议向学校官方确认。'
-严禁在未尝试其他途径时轻易回答'不知道'。如果资料或搜索结果中部分提及了相关信息，请基于已有信息作答，不要因为信息不完整就拒绝回答。
+
+【知识调取优先级】
+1. 【优先参考本地资料】：如果传入了《好人师兄》本地资料，请通读所有参考资料后再作答。请将所有资料中提及的相关信息汇总完整，不要只看第一篇就急于回答，确保信息完整不遗漏（例如问"有几个学院"时，要统计资料中提及的所有学院，包括新成立的学院）。
+   - 如果资料与问题明显不相关，请直接忽略，不要被资料束缚。
+2. 【补充网络搜索】：如果本地资料未提及，请结合【联网搜索结果】进行回答，并说明信息来自网络；
+   - 如果搜索结果与问题不相关，请直接忽略搜索结果。
+3. 【通用知识兜底】：如果本地和联网均未搜到（或均不相关），请直接使用你的通用知识进行回答。
+   - 常识类问题（如日期、天气、时间、科学常识、生活常识等）请直接回答，不要说不知道。
+   - 只有广金校园相关的专业问题，如果确实不确定，才在回答末尾提示：
+     '> 💡 晨曦师兄提示：以上信息仅供参考，具体建议向学校官方确认。'
+
+【重要原则】
+- 严禁在未尝试其他途径时轻易回答'不知道'。
+- 如果资料或搜索结果中部分提及了相关信息，请基于已有信息作答，不要因为信息不完整就拒绝回答。
+- 简单常识问题（今天几号、星期几、天气怎么样、你是谁等）请直接回答，不要被参考资料限制。
 
 用户信息：
 - 校区：肇庆校区（肇庆市端州区）
@@ -121,27 +130,53 @@ def search_wechat_articles(query: str) -> str:
     })
     return generate_articles_summary(articles)
 
+CAMPUS_KEYWORDS = [
+    "广金", "广东金融学院", "肇庆校区", "校区", "学院", "专业", "宿舍", "食堂", "饭堂",
+    "图书馆", "教学楼", "操场", "体育馆", "校医", "校车", "快递", "校园卡", "教务",
+    "选课", "考试", "绩点", "转专业", "保研", "考研", "就业", "实习", "社团", "学生会",
+    "迎新", "新生", "报到", "军训", "校历", "作息", "放假", "开学", "毕业", "学位",
+    "学费", "住宿", "空调", "洗衣机", "水电", "报修", "门禁", "辅导员", "班主任",
+    "校本部", "广州", "肇庆", "清远", "龙洞", "地址", "路线", "怎么走", "在哪", "哪里",
+    "电话", "官网", "公众号", "师兄", "师姐", "新生群"
+]
+
+
+def is_campus_related(user_input):
+    """判断用户问题是否与广金校园相关"""
+    for kw in CAMPUS_KEYWORDS:
+        if kw in user_input:
+            return True
+    return False
+
+
 def build_hybrid_context(user_input):
     context_parts = []
     has_local = False
     has_web = False
+    campus_related = is_campus_related(user_input)
 
-    # 步骤一：本地知识库检索（取 top 4 提高覆盖率）
+    # 步骤一：本地知识库检索（取 top 6 提高覆盖率）
     local_docs = load_local_knowledge()
     kb_context = ""
     if local_docs:
-        results = search_knowledge(user_input, local_docs, top_n=4)
+        results = search_knowledge(user_input, local_docs, top_n=6)
         if results:
             kb_context = build_knowledge_context(results)
             context_parts.append(f"[本地知识库参考]\n{kb_context}")
             has_local = True
 
     # 步骤二：判断是否需要网络搜索
-    need_web = need_web_search(user_input) or not has_local
+    # - 校园相关问题：本地没找到 或 含搜索关键词 → 搜索，且加校区前缀
+    # - 非校园问题：含搜索关键词才搜索，且不加校区前缀（避免污染搜索结果）
+    if campus_related:
+        need_web = need_web_search(user_input) or not has_local
+        search_query = f"广东金融学院 肇庆校区 {user_input}"
+    else:
+        need_web = need_web_search(user_input)
+        search_query = user_input
 
     web_context = ""
     if need_web:
-        search_query = f"广东金融学院 肇庆校区 {user_input}"
         search_results = web_search(search_query)
         if search_results:
             web_context = build_search_context(search_results)

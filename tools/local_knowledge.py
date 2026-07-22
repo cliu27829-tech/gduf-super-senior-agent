@@ -139,14 +139,15 @@ def _extract_text_from_html(html):
 # ---------------------------------------------------------------------------
 
 # 相关性阈值：低于此分数的文档不返回，避免低质量匹配误导 LLM
-RELEVANCE_THRESHOLD = 0.03
+# 阈值降低到 0.015，提高召回率
+RELEVANCE_THRESHOLD = 0.015
 
 
-def search_knowledge(query, docs, top_n=4):
+def search_knowledge(query, docs, top_n=6):
     """
     改进的轻量级文本检索
-    评分 = 0.35*Jaccard + 0.35*Cosine + 0.15*标题子串加成 + 0.15*正文子串加成
-    标题命中会额外获得 1.5x 倍率提升
+    评分 = 0.3*Jaccard + 0.3*Cosine + 0.2*标题子串加成 + 0.2*正文子串加成
+    标题命中会额外获得 2.0x 倍率提升（标题更能代表文章主题）
     返回匹配度最高的 top_n 篇文章（分数须高于阈值）
     """
     if not docs or not query:
@@ -173,15 +174,15 @@ def search_knowledge(query, docs, top_n=4):
         content_substring = _substring_boost(query, content)
 
         base_score = (
-            0.35 * jaccard
-            + 0.35 * cosine
-            + 0.15 * title_substring
-            + 0.15 * content_substring
+            0.3 * jaccard
+            + 0.3 * cosine
+            + 0.2 * title_substring
+            + 0.2 * content_substring
         )
 
-        # 标题命中倍率提升
+        # 标题命中倍率提升（标题更能代表文章主题）
         if title_substring > 0:
-            base_score *= 1.5
+            base_score *= 2.0
 
         scored_docs.append((doc, base_score))
 
