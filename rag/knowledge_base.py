@@ -1,7 +1,7 @@
 from langchain_community.document_loaders import TextLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings import FakeEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
@@ -51,12 +51,7 @@ class CampusKnowledgeBase:
         
         splits = text_splitter.split_documents(documents)
         
-        embeddings = OpenAIEmbeddings(
-            model="deepseek-embed",
-            api_key=self.api_key,
-            base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-        )
-        
+        embeddings = FakeEmbeddings(size=384)
         self.vector_store = FAISS.from_documents(splits, embeddings)
         
         return True
