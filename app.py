@@ -12,6 +12,8 @@ from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 
+AVATAR_URL = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20white%20background%20cute%20style&image_size=square_hd"
+
 def initialize_session_state():
     """
     初始化会话状态
@@ -205,13 +207,39 @@ def add_pwa_support():
     """
     添加 PWA 支持，使应用可以被添加到手机主屏幕
     """
-    st.markdown("""
-    <link rel="manifest" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=manifest%20json%20for%20university%20app&image_size=square">
+    manifest = {
+        "name": "广金万事屋",
+        "short_name": "广金万事屋",
+        "description": "专为广东金融学院学生打造的智能助手",
+        "start_url": ".",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "theme_color": "#e74c3c",
+        "orientation": "portrait",
+        "icons": [
+            {
+                "src": AVATAR_URL,
+                "sizes": "192x192",
+                "type": "image/png"
+            },
+            {
+                "src": AVATAR_URL,
+                "sizes": "512x512",
+                "type": "image/png"
+            }
+        ]
+    }
+    
+    manifest_str = json.dumps(manifest)
+    
+    st.markdown(f"""
+    <link rel="manifest" href="data:application/json;base64,{manifest_str.encode().decode('base64')}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="广金万事屋">
-    <link rel="apple-touch-icon" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Guangdong%20University%20of%20Finance%20school%20emblem%20red%20circle%20golden%20logo%20minimalist&image_size=square_hd">
+    <link rel="apple-touch-icon" href="{AVATAR_URL}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <link rel="shortcut icon" href="{AVATAR_URL}" type="image/png">
     """, unsafe_allow_html=True)
 
 def main():
@@ -220,7 +248,7 @@ def main():
     """
     st.set_page_config(
         page_title="广金万事屋师兄",
-        page_icon="🎓",
+        page_icon=AVATAR_URL,
         layout="centered"
     )
     
@@ -273,7 +301,8 @@ def main():
             os.environ["DEEPSEEK_BASE_URL"] = "https://api.deepseek.com/v1"
     
     for message in st.session_state.messages:
-        with st.chat_message(message["role"], avatar=message.get("avatar")):
+        avatar = AVATAR_URL if message["role"] == "assistant" else None
+        with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
     
     if prompt := st.chat_input("请输入你的问题..."):
@@ -291,7 +320,7 @@ def main():
         with st.chat_message("user"):
             st.markdown(prompt)
         
-        with st.chat_message("assistant", avatar="🧑‍🎓"):
+        with st.chat_message("assistant", avatar=AVATAR_URL):
             if st.session_state.current_mode == "干活模式":
                 response = handle_task_mode(prompt, api_key)
             else:
@@ -299,7 +328,7 @@ def main():
             
             st.markdown(response)
         
-        st.session_state.messages.append({"role": "assistant", "content": response, "avatar": "🧑‍🎓"})
+        st.session_state.messages.append({"role": "assistant", "content": response, "avatar": AVATAR_URL})
 
 if __name__ == "__main__":
     main()
