@@ -2,9 +2,11 @@ import streamlit as st
 from dotenv import load_dotenv
 import os
 import json
+import base64
 
 from tools.ics_tool import extract_tasks_from_text, generate_ics_file
 from tools.csv_tool import parse_expenses_from_text, generate_csv_file, generate_markdown_table
+from tools.wechat_tool import crawl_gduf_wechat, generate_articles_summary
 from rag.knowledge_base import CampusKnowledgeBase
 
 from langchain_openai import ChatOpenAI
@@ -12,7 +14,7 @@ from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 
-AVATAR_URL = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20white%20background%20cute%20style&image_size=square_hd"
+AVATAR_URL = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20beige%20vest%20white%20background%20cute%20style&image_size=square_hd"
 
 def initialize_session_state():
     """
@@ -103,6 +105,26 @@ def parse_expense_text(text: str) -> str:
     total = sum(e["amount"] for e in expenses)
     return f"成功解析 {len(expenses)} 条消费记录，总计 {total:.2f} 元"
 
+@tool
+def search_wechat_articles(query: str) -> str:
+    """
+    搜索微信公众号文章获取最新资讯
+    输入：搜索关键词
+    输出：最新文章摘要信息
+    """
+    articles = crawl_gduf_wechat()
+    
+    if not articles:
+        return "暂未搜索到相关公众号文章"
+    
+    save_tool_result({
+        "success": True,
+        "type": "wechat",
+        "articles": articles
+    })
+    
+    return generate_articles_summary(articles)
+
 def handle_task_mode(user_input, api_key):
     """
     使用LangChain工具调用处理干活模式的用户输入
@@ -116,7 +138,7 @@ def handle_task_mode(user_input, api_key):
         base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     )
     
-    tools = [generate_ics_calendar, parse_expense_text]
+    tools = [generate_ics_calendar, parse_expense_text, search_wechat_articles]
     llm_with_tools = llm.bind_tools(tools)
     
     prompt = ChatPromptTemplate.from_messages([
@@ -125,9 +147,10 @@ def handle_task_mode(user_input, api_key):
         你有以下工具可用：
         1. generate_ics_calendar: 根据班群通知文本提取任务信息并生成日历文件。当用户输入包含任务名称、截止时间、地点等信息的通知文本时调用此工具。
         2. parse_expense_text: 解析消费记录文本并生成CSV文件和统计表格。当用户输入包含消费日期、金额、描述等信息的文本时调用此工具。
+        3. search_wechat_articles: 搜索微信公众号文章获取广金最新资讯。当用户询问学校最新动态、新闻、通知等时调用此工具。
         
         请根据用户的需求，选择合适的工具进行调用。
-        如果用户的问题不属于上述两类，直接回答，不需要调用工具。
+        如果用户的问题不属于上述三类，直接回答，不需要调用工具。
         
         回答时保持老学长的口吻，靠谱、不废话。"""),
         ("human", "{input}"),
@@ -182,6 +205,18 @@ def handle_task_mode(user_input, api_key):
                     )
                     
                     return "消费记录已整理完成！以上是你的账单汇总，请点击按钮导出CSV文件。"
+                
+                elif tool_result["type"] == "wechat":
+                    st.write("正在整理公众号文章...")
+                    status.update(label="任务完成", state="complete", expanded=False)
+                    
+                    articles = tool_result.get("articles", [])
+                    for article in articles[:3]:
+                        with st.expander(f"📢 {article['title']}"):
+                            st.markdown(f"**日期**：{article['date']}")
+                            st.markdown(f"**摘要**：{article['summary']}")
+                            if article['link']:
+                                st.markdown(f"**原文链接**：[{article['link']}]({article['link']})")
             
             return result
         
@@ -231,9 +266,10 @@ def add_pwa_support():
     }
     
     manifest_str = json.dumps(manifest)
+    manifest_b64 = base64.b64encode(manifest_str.encode()).decode('utf-8')
     
     st.markdown(f"""
-    <link rel="manifest" href="data:application/json;base64,{manifest_str.encode().decode('base64')}">
+    <link rel="manifest" href="data:application/json;base64,{manifest_b64}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="广金万事屋">
@@ -274,10 +310,11 @@ def main():
         st.divider()
         
         if st.session_state.current_mode == "干活模式":
-            st.info("**干活模式**：处理班群通知生成日历，解析消费记录生成账单")
+            st.info("**干活模式**：处理班群通知生成日历，解析消费记录生成账单，获取公众号资讯")
             st.markdown("""
             📅 **DDL收割机**：输入班群通知，自动提取任务和截止时间，生成日历文件
             📊 **账单流水**：输入消费记录，自动分类汇总，生成表格和CSV
+            📰 **校园资讯**：获取广金相关公众号最新文章和通知
             """)
         else:
             st.info("**生活向导模式**：基于广金知识库回答校园问题")
