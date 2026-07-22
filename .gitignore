@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env.local
+.env.*.local
+venv/
+*.db
+*.ics
+*.csv
+.DS_Store
+.streamlit/secrets.toml
+data/*.pdf
+data/*.txt
+!data/sample_guide.txt
+unimate/
