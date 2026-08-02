@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>广金万事屋师兄</title>
+    <title>广金大师兄</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="广金万事屋">
+    <meta name="apple-mobile-web-app-title" content="广金大师兄">
     <style>
         * {
             margin: 0;
@@ -52,9 +52,16 @@
             width: 80px;
             height: 80px;
             border-radius: 50%;
-            background: url('https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20beige%20vest%20white%20background%20cute%20style&image_size=square_hd') center/cover no-repeat;
+            background: rgba(255,255,255,0.95);
             margin-bottom: 20px;
             animation: pulse 2s infinite;
+        }
+        .loading-icon::after {
+            content: '🎓';
+            display: grid;
+            place-items: center;
+            height: 100%;
+            font-size: 44px;
         }
         .loading-text {
             color: white;
@@ -120,12 +127,29 @@
         .retry-btn:hover {
             background: #c0392b;
         }
+        .config-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: none;
+            place-items: center;
+            background: #f5f5f5;
+            padding: 24px;
+        }
+        .config-card { max-width: 520px; width: 100%; }
+        .config-card h1 { margin-bottom: 12px; }
+        .config-card p { color: #666; line-height: 1.6; margin-bottom: 16px; }
+        .config-card input {
+            width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px;
+            font-size: 16px; margin-bottom: 12px;
+        }
+        .config-error { color: #b42318; min-height: 24px; }
     </style>
 </head>
 <body>
     <div class="loading-screen" id="loading">
         <div class="loading-icon"></div>
-        <div class="loading-text">广金万事屋师兄</div>
+        <div class="loading-text">广金大师兄</div>
         <div class="loading-subtext">正在连接服务器...</div>
     </div>
     
@@ -134,16 +158,30 @@
         <div class="error-title">连接失败</div>
         <div class="error-message">无法连接到服务器，请检查网络连接后重试</div>
         <button class="retry-btn" onclick="retryConnection()">重试连接</button>
+        <button class="retry-btn" onclick="showConfiguration()" style="margin-top: 12px;">更换服务器</button>
+    </div>
+
+    <div class="config-screen" id="configuration">
+        <div class="config-card">
+            <h1>配置广金大师兄</h1>
+            <p>请输入已部署的 HTTPS Streamlit 地址。地址只保存在本设备，安装包不再写死公网 IP。</p>
+            <input id="server-url" type="url" inputmode="url" placeholder="https://your-app.streamlit.app">
+            <div class="config-error" id="config-error"></div>
+            <button class="retry-btn" onclick="saveConfiguration()">保存并连接</button>
+        </div>
     </div>
     
     <div id="app-container">
-        <iframe id="app-iframe" src="http://136.175.178.35:8501" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+        <iframe id="app-iframe" title="广金大师兄" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"></iframe>
     </div>
 
     <script>
         const loading = document.getElementById('loading');
         const error = document.getElementById('error');
         const iframe = document.getElementById('app-iframe');
+        const configuration = document.getElementById('configuration');
+        const serverUrlInput = document.getElementById('server-url');
+        const configError = document.getElementById('config-error');
         
         let connectionTimeout;
         
@@ -161,6 +199,37 @@
             hideError();
             iframe.src = iframe.src;
         }
+
+        function isAllowedUrl(value) {
+            try {
+                const parsed = new URL(value);
+                return parsed.protocol === 'https:' ||
+                    (parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname));
+            } catch (_) {
+                return false;
+            }
+        }
+
+        function showConfiguration() {
+            error.style.display = 'none';
+            loading.classList.add('hidden');
+            serverUrlInput.value = localStorage.getItem('gdufAgentUrl') || '';
+            configuration.style.display = 'grid';
+        }
+
+        function saveConfiguration() {
+            const value = serverUrlInput.value.trim().replace(/\/$/, '');
+            if (!isAllowedUrl(value)) {
+                configError.textContent = '请输入 HTTPS 地址（本机调试可使用 localhost HTTP）。';
+                return;
+            }
+            configError.textContent = '';
+            localStorage.setItem('gdufAgentUrl', value);
+            configuration.style.display = 'none';
+            loading.classList.remove('hidden');
+            iframe.src = value;
+            startConnectionTimeout();
+        }
         
         iframe.addEventListener('load', function() {
             clearTimeout(connectionTimeout);
@@ -171,9 +240,18 @@
             showError();
         });
         
-        connectionTimeout = setTimeout(function() {
-            showError();
-        }, 10000);
+        function startConnectionTimeout() {
+            clearTimeout(connectionTimeout);
+            connectionTimeout = setTimeout(showError, 10000);
+        }
+
+        const configuredUrl = localStorage.getItem('gdufAgentUrl');
+        if (configuredUrl && isAllowedUrl(configuredUrl)) {
+            iframe.src = configuredUrl;
+            startConnectionTimeout();
+        } else {
+            showConfiguration();
+        }
     </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 {
   "name": "gduf-super-senior",
   "version": "1.0.0",
-  "description": "广金万事屋师兄 - 校园智能助手",
+  "description": "广金大师兄 - 校园信息执行与位置服务 Agent",
   "main": "index.js",
   "scripts": {
     "build": "echo 'Build completed'",
