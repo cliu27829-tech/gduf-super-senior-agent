@@ -1,0 +1,115 @@
+[
+  {
+    "id": "gz-campus-anchor",
+    "name": "广州校本部",
+    "aliases": ["校本部", "广州校区", "龙洞校区"],
+    "campus": "广州校本部",
+    "category": "other",
+    "sub_category": "campus_anchor",
+    "description": "学校官方招生章程曾公布的校本部地址；校内点位为示意坐标。",
+    "address": "广州市天河区龙洞迎福路527号",
+    "map_x": 0.50,
+    "map_y": 0.50,
+    "source_references": [
+      {
+        "title": "广东金融学院2025年普通高考招生章程",
+        "url": "https://xxgk.gduf.edu.cn/info/1020/2155.htm",
+        "publisher": "广东金融学院信息公开网",
+        "published_at": "2025-05-01",
+        "source_level": 1,
+        "is_official": true,
+        "source_status": "historical"
+      }
+    ],
+    "verification_method": "official_historical",
+    "verified_at": null,
+    "freshness_status": "needs_verification",
+    "confidence": 0.75,
+    "is_active": true,
+    "data_status": "historical_seed"
+  },
+  {
+    "id": "gz-north-canteen",
+    "name": "北苑饭堂",
+    "aliases": ["北饭", "北苑食堂"],
+    "campus": "广州校本部",
+    "category": "canteen",
+    "area": "北苑区域（具体位置待复核）",
+    "map_x": 0.42,
+    "map_y": 0.64,
+    "description": "名称来自学校后勤历史页面；楼层、档口、营业时间和支付方式均待当前核验。",
+    "source_references": [
+      {
+        "title": "饭堂介绍",
+        "url": "https://hq.gduf.edu.cn/info/1087/1733.htm",
+        "publisher": "广东金融学院后勤服务中心",
+        "published_at": null,
+        "source_level": 2,
+        "is_official": true,
+        "source_status": "historical"
+      }
+    ],
+    "verification_method": "official_historical",
+    "verified_at": null,
+    "freshness_status": "expired",
+    "confidence": 0.45,
+    "is_active": true,
+    "data_status": "historical_seed"
+  },
+  {
+    "id": "gz-south-canteen",
+    "name": "南苑饭堂",
+    "aliases": ["南饭", "南苑食堂"],
+    "campus": "广州校本部",
+    "category": "canteen",
+    "area": "南苑区域（具体位置待复核）",
+    "map_x": 0.60,
+    "map_y": 0.34,
+    "description": "名称来自学校后勤历史页面；当前布局与营业情况待核验。",
+    "source_references": [
+      {
+        "title": "饭堂介绍",
+        "url": "https://hq.gduf.edu.cn/info/1087/1733.htm",
+        "publisher": "广东金融学院后勤服务中心",
+        "published_at": null,
+        "source_level": 2,
+        "is_official": true,
+        "source_status": "historical"
+      }
+    ],
+    "verification_method": "official_historical",
+    "verified_at": null,
+    "freshness_status": "expired",
+    "confidence": 0.45,
+    "is_active": true,
+    "data_status": "historical_seed"
+  },
+  {
+    "id": "gz-north-teaching-building",
+    "name": "北教学楼",
+    "aliases": ["北教"],
+    "campus": "广州校本部",
+    "category": "teaching_building",
+    "area": "校内位置待核验",
+    "map_x": 0.46,
+    "map_y": 0.48,
+    "description": "本地历史通知提及该建筑；示意坐标不代表精确 GPS。",
+    "source_references": [
+      {
+        "title": "关于北教学楼封闭考场的通知（本地历史资料）",
+        "url": "",
+        "publisher": "本地历史资料",
+        "published_at": null,
+        "source_level": 8,
+        "is_official": false,
+        "source_status": "historical"
+      }
+    ],
+    "verification_method": "unverified_seed",
+    "verified_at": null,
+    "freshness_status": "needs_verification",
+    "confidence": 0.3,
+    "is_active": true,
+    "data_status": "demo_fixture"
+  }
+]

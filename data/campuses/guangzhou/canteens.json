@@ -1,0 +1,21 @@
+[
+  {
+    "id": "gz-north-demo-stall",
+    "canteen_id": "gz-north-canteen",
+    "name": "示例档口（待管理员替换）",
+    "campus": "广州校本部",
+    "floor": "待核验",
+    "food_type": "示例数据",
+    "common_items": [],
+    "price_range": "",
+    "meal_periods": [],
+    "opening_hours": "",
+    "payment_methods": [],
+    "is_operating": null,
+    "verified_at": null,
+    "source_references": [],
+    "confidence": 0.0,
+    "data_status": "demo_fixture",
+    "is_active": true
+  }
+]

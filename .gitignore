@@ -6,7 +6,13 @@ __pycache__/
 .env.local
 .env.*.local
 venv/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
 *.db
+*.db-shm
+*.db-wal
 *.ics
 *.csv
 .DS_Store
@@ -14,6 +20,9 @@ venv/
 data/*.pdf
 data/*.txt
 !data/sample_guide.txt
+data/exports/
+data/uploads/
+mobile/node_modules/
 unimate/
 
 # 好人师兄文件夹：只推送 .md 和 .txt 文件，排除大文件

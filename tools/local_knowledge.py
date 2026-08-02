@@ -12,6 +12,8 @@ import re
 import math
 import streamlit as st
 
+from core.time_service import current_year_china
+
 
 # ---------------------------------------------------------------------------
 # 分词
@@ -94,8 +96,37 @@ def _substring_boost(query, text):
 # 知识库加载
 # ---------------------------------------------------------------------------
 
+def _knowledge_metadata(filename, content, reference_year):
+    years = sorted({int(value) for value in re.findall(r'(?<!\d)(20\d{2})(?!\d)', content)})
+    urls = re.findall(r'https?://[^\s\)\]<>"\'，。]+', content)
+    official_urls = [url for url in urls if '.gduf.edu.cn' in url or 'gduf.edu.cn' in url]
+    latest_year = max(years) if years else None
+    if latest_year is None:
+        source_status = "needs_verification"
+        freshness_status = "unknown"
+        warning = "资料没有可解析年份，当前状态待核验。"
+    elif latest_year < reference_year:
+        source_status = "historical"
+        freshness_status = "expired"
+        warning = f"历史资料（最晚提及 {latest_year} 年），不应作为 {reference_year} 年现状直接回答。"
+    else:
+        source_status = "needs_verification"
+        freshness_status = "needs_verification"
+        warning = "资料年份可能较新，但尚未经过管理员核验。"
+    return {
+        "years": years,
+        "source_urls": urls,
+        "official_source_urls": official_urls,
+        "source_status": source_status,
+        "verified_at": None,
+        "freshness_status": freshness_status,
+        "warning": warning,
+        "filename": filename,
+    }
+
+
 @st.cache_data
-def load_local_knowledge(kb_dir="好人师兄"):
+def load_local_knowledge(kb_dir="好人师兄", reference_year=None):
     """
     启动时加载本地知识库文件
     遍历 好人师兄 文件夹，读取所有 .md, .txt, .html 文件
@@ -107,6 +138,7 @@ def load_local_knowledge(kb_dir="好人师兄"):
     if not os.path.exists(kb_dir):
         return docs
 
+    reference_year = reference_year or current_year_china()
     for filename in os.listdir(kb_dir):
         filepath = os.path.join(kb_dir, filename)
         if not os.path.isfile(filepath):
@@ -120,7 +152,11 @@ def load_local_knowledge(kb_dir="好人师兄"):
                 content = _extract_text_from_html(content)
             content = content.strip()
             if content:
-                docs.append({"filename": filename, "content": content})
+                docs.append({
+                    "filename": filename,
+                    "content": content,
+                    "metadata": _knowledge_metadata(filename, content, reference_year),
+                })
         except Exception as e:
             st.warning(f"读取文件 {filename} 失败: {e}")
     return docs
@@ -200,7 +236,13 @@ def build_knowledge_context(results):
         return ""
     context = "\n\n<参考资料>\n"
     for i, doc in enumerate(results, 1):
-        context += f"\n【文章{i}】来源：{doc['filename']}\n"
+        metadata = doc.get("metadata") or {}
+        context += f"\n【文章{i}】来源文件：{doc['filename']}\n"
+        context += f"资料状态：{metadata.get('source_status', 'unverified')}\n"
+        context += f"时效警告：{metadata.get('warning', '状态待核验')}\n"
+        source_urls = metadata.get("source_urls") or []
+        if source_urls:
+            context += f"原文链接：{source_urls[0]}\n"
         context += f"{doc['content'][:1500]}\n"
     context += "\n</参考资料>\n"
     return context
@@ -214,7 +256,7 @@ def get_knowledge_injected_prompt(user_input, docs):
     context = build_knowledge_context(results)
     injected_prompt = (
         f"{context}\n"
-        f"请优先参考以上资料回答广金校区相关问题，如资料未提及，可结合联网搜索结果或通用知识回答。\n\n"
+        "请仅把以上资料作为带时效警告的历史线索；资料未明确说明的校园事实不要补写。\n\n"
         f"用户问题：{user_input}"
     )
     return injected_prompt

@@ -1,142 +1,89 @@
-from icalendar import Calendar, Event
-from datetime import datetime, timedelta
+"""Notification extraction compatibility helpers and China-time ICS generation."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from pathlib import Path
+from typing import Any, Iterable
 import uuid
-import re
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-from pydantic import BaseModel, Field
-from typing import List
-import os
 
-class Task(BaseModel):
-    name: str = Field(description="任务名称")
-    deadline: str = Field(description="截止时间，格式YYYY-MM-DD HH:MM")
-    location: str = Field(description="地点/备注")
+from icalendar import Calendar, Event
 
-class TaskList(BaseModel):
-    tasks: List[Task] = Field(description="任务列表")
+from core.time_service import CHINA_TZ, now_china, parse_datetime_value
+from services.notification_service import NotificationService
 
-def extract_tasks_from_text(text, openai_api_key):
-    """
-    使用LLM从班群通知文本中提取任务信息
-    返回包含任务名称、截止时间、地点/备注的列表
-    """
-    output_parser = JsonOutputParser(pydantic_object=TaskList)
-    format_instructions = output_parser.get_format_instructions()
-    
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个任务提取助手，请从文本中提取所有任务信息。"),
-        ("human", "请从以下文本中提取所有任务信息，包括任务名称、截止时间和地点/备注：\n\n{text}\n\n{format_instructions}")
-    ])
-    
-    llm = ChatOpenAI(
-        temperature=0,
-        model="deepseek-chat",
-        api_key=openai_api_key,
-        base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-    )
-    chain = prompt | llm | output_parser
-    
-    try:
-        result = chain.invoke({"text": text, "format_instructions": format_instructions})
-        return [t.dict() for t in result.tasks]
-    except Exception as e:
-        return extract_tasks_fallback(text)
 
-def extract_tasks_fallback(text):
-    """
-    当LLM提取失败时的备用规则匹配方法
-    """
-    tasks = []
-    
-    date_patterns = [
-        r'(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?\s*(\d{1,2}):(\d{1,2})',
-        r'(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{1,2})',
-        r'(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})',
-        r'(\d{1,2})月(\d{1,2})日'
+def extract_tasks_from_text(text: str, openai_api_key: str = "", reference_time=None) -> list[dict[str, Any]]:
+    drafts = NotificationService().extract(text, openai_api_key, reference_time)
+    return [
+        {
+            "name": draft.title,
+            "title": draft.title,
+            "deadline": draft.deadline,
+            "location": draft.location,
+            "materials": draft.materials,
+            "submission_method": draft.submission_method,
+            "source_text": draft.source_text,
+            "needs_confirmation": draft.needs_confirmation,
+            "date_explanation": draft.date_explanation,
+        }
+        for draft in drafts
     ]
-    
-    lines = text.split('\n')
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        
-        for pattern in date_patterns:
-            match = re.search(pattern, line)
-            if match:
-                try:
-                    groups = match.groups()
-                    if len(groups) == 5:
-                        year, month, day, hour, minute = groups
-                    elif len(groups) == 4:
-                        year = datetime.now().year
-                        month, day, hour, minute = groups
-                    elif len(groups) == 3:
-                        year, month, day = groups
-                        hour, minute = "23", "59"
-                    else:
-                        year = datetime.now().year
-                        month, day = groups
-                        hour, minute = "23", "59"
-                    
-                    deadline = f"{year}-{month.zfill(2)}-{day.zfill(2)} {hour.zfill(2)}:{minute.zfill(2)}"
-                    task_name = line[:match.start()].strip() or "未命名任务"
-                    
-                    tasks.append({
-                        "name": task_name,
-                        "deadline": deadline,
-                        "location": ""
-                    })
-                except:
-                    pass
-    
-    return tasks
 
-def generate_ics_file(tasks, filename="calendar.ics"):
-    """
-    将任务列表转换为ICS格式文件
-    """
-    cal = Calendar()
-    cal.add('prodid', '-//GDUF Super-Senior Agent//Calendar//CN')
-    cal.add('version', '2.0')
-    cal.add('name', '广金任务日历')
-    
+
+def generate_ics_bytes(tasks: Iterable[dict[str, Any]], reference_time=None) -> bytes:
+    calendar = Calendar()
+    calendar.add("prodid", "-//GDUF Super Senior Agent//Calendar//CN")
+    calendar.add("version", "2.0")
+    calendar.add("name", "广金大师兄任务日历")
+    calendar.add("X-WR-TIMEZONE", "Asia/Shanghai")
     for task in tasks:
+        deadline = parse_datetime_value(task.get("deadline"))
+        if not deadline:
+            continue
         event = Event()
-        event.add('summary', task.get("name", "未命名任务"))
-        
-        try:
-            deadline_str = task.get("deadline", "")
-            if deadline_str:
-                dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")
-                event.add('dtstart', dt)
-                event.add('dtend', dt + timedelta(hours=1))
-        except:
-            pass
-        
-        location = task.get("location", "")
-        if location:
-            event.add('location', location)
-        
-        event.add('uid', str(uuid.uuid4()) + '@gduf-agent')
-        event.add('dtstamp', datetime.now())
-        
-        cal.add_component(event)
-    
-    with open(filename, 'wb') as f:
-        f.write(cal.to_ical())
-    
-    return filename
+        event.add("summary", task.get("title") or task.get("name") or "未命名任务")
+        event.add("dtstart", deadline.astimezone(CHINA_TZ))
+        event.add("dtend", deadline.astimezone(CHINA_TZ) + timedelta(hours=1))
+        if task.get("location"):
+            event.add("location", task["location"])
+        details = []
+        if task.get("materials"):
+            details.append("材料：" + "、".join(task["materials"]))
+        if task.get("submission_method"):
+            details.append("提交方式：" + task["submission_method"])
+        if task.get("source_text"):
+            details.append("来源通知：" + task["source_text"][:500])
+        if details:
+            event.add("description", "\n".join(details))
+        event.add("uid", f"{task.get('id') or uuid.uuid4()}@gduf-agent")
+        event.add("dtstamp", now_china(reference_time))
+        calendar.add_component(event)
+    return calendar.to_ical()
 
-def process_notification(text, openai_api_key, output_filename="gduf_tasks.ics"):
-    """
-    完整流程：解析通知文本 -> 提取任务 -> 生成ICS文件
-    """
-    tasks = extract_tasks_from_text(text, openai_api_key)
+
+def generate_ics_file(
+    tasks: Iterable[dict[str, Any]],
+    filename: str | Path | None = None,
+    reference_time=None,
+) -> str:
+    if filename is None:
+        export_dir = Path("data/exports")
+        export_dir.mkdir(parents=True, exist_ok=True)
+        filename = export_dir / f"gduf-tasks-{uuid.uuid4().hex}.ics"
+    output = Path(filename)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(generate_ics_bytes(tasks, reference_time))
+    return str(output)
+
+
+def process_notification(
+    text: str,
+    openai_api_key: str = "",
+    output_filename: str | Path | None = None,
+    reference_time=None,
+):
+    tasks = extract_tasks_from_text(text, openai_api_key, reference_time)
     if not tasks:
         return None, "未从文本中提取到任务信息"
-    
-    ics_file = generate_ics_file(tasks, output_filename)
-    return ics_file, tasks
+    return generate_ics_file(tasks, output_filename, reference_time), tasks

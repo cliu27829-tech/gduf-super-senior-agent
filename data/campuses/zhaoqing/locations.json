@@ -1,0 +1,87 @@
+[
+  {
+    "id": "zq-campus-anchor",
+    "name": "肇庆校区",
+    "aliases": ["肇庆", "星湖校区"],
+    "campus": "肇庆校区",
+    "category": "other",
+    "sub_category": "campus_anchor",
+    "description": "官方校区简介公开的校区地址；校内点位仍需人工核验。",
+    "address": "广东省肇庆市星湖石牌",
+    "map_x": 0.50,
+    "map_y": 0.50,
+    "source_references": [
+      {
+        "title": "校区简介",
+        "url": "https://zqxq.gduf.edu.cn/index/xqjj.htm",
+        "publisher": "广东金融学院肇庆校区",
+        "published_at": null,
+        "source_level": 1,
+        "is_official": true,
+        "source_status": "current_source"
+      }
+    ],
+    "verification_method": "official_page",
+    "verified_at": null,
+    "freshness_status": "needs_verification",
+    "confidence": 0.7,
+    "is_active": true,
+    "data_status": "unverified_seed"
+  },
+  {
+    "id": "zq-canteen",
+    "name": "肇庆校区饭堂（名称待核验）",
+    "aliases": ["肇庆饭堂", "一饭（学生俗称待核验）"],
+    "campus": "肇庆校区",
+    "category": "canteen",
+    "area": "校内具体位置待核验",
+    "map_x": 0.58,
+    "map_y": 0.42,
+    "description": "官方校区简介仅确认校内建有饭堂，名称、楼层和营业信息未在该页面说明。",
+    "source_references": [
+      {
+        "title": "校区简介",
+        "url": "https://zqxq.gduf.edu.cn/index/xqjj.htm",
+        "publisher": "广东金融学院肇庆校区",
+        "published_at": null,
+        "source_level": 1,
+        "is_official": true,
+        "source_status": "current_source"
+      }
+    ],
+    "verification_method": "official_page_partial",
+    "verified_at": null,
+    "freshness_status": "needs_verification",
+    "confidence": 0.35,
+    "is_active": true,
+    "data_status": "unverified_seed"
+  },
+  {
+    "id": "zq-library",
+    "name": "肇庆校区图书馆",
+    "aliases": ["肇庆图书馆"],
+    "campus": "肇庆校区",
+    "category": "library",
+    "area": "校内具体位置待核验",
+    "map_x": 0.44,
+    "map_y": 0.55,
+    "description": "官方校区简介确认校内有图书馆；开放时间与入口待核验。",
+    "source_references": [
+      {
+        "title": "校区简介",
+        "url": "https://zqxq.gduf.edu.cn/index/xqjj.htm",
+        "publisher": "广东金融学院肇庆校区",
+        "published_at": null,
+        "source_level": 1,
+        "is_official": true,
+        "source_status": "current_source"
+      }
+    ],
+    "verification_method": "official_page_partial",
+    "verified_at": null,
+    "freshness_status": "needs_verification",
+    "confidence": 0.4,
+    "is_active": true,
+    "data_status": "unverified_seed"
+  }
+]

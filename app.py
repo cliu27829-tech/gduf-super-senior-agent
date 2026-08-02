@@ -1,158 +1,89 @@
+"""广金大师兄 Streamlit entry page."""
+
+from __future__ import annotations
+
+import uuid
+
 import streamlit as st
-from dotenv import load_dotenv
-import os
-import json
-import base64
 
-AVATAR_URL = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=pixel%20art%20anime%20girl%20with%20black%20ponytail%20hair%20brown%20eyes%20school%20uniform%20beige%20vest%20white%20background%20cute%20style&image_size=square_hd"
+from config import get_deepseek_api_key
+from core.models import CAMPUSES
+from core.time_service import current_year_china, format_current_time_prompt
 
-CAMPUSES = {
-    "校本部": {"icon": "🏫", "location": "广州市天河区", "page": "pages/1_校本部.py"},
-    "肇庆校区": {"icon": "🌳", "location": "肇庆市端州区", "page": "pages/2_肇庆校区.py"},
-    "清远校区": {"icon": "✨", "location": "清远市清城区", "page": "pages/3_清远校区.py"}
+
+AVATAR_PATH = "static/avatar.png"
+CAMPUS_PAGES = {
+    "广州校本部": "pages/1_校本部.py",
+    "肇庆校区": "pages/2_肇庆校区.py",
+    "清远校区": "pages/3_清远校区.py",
 }
 
-GRADES = ["2026级", "2025级", "2024级", "2023级", "其他"]
 
-def initialize_session_state():
-    if "user_campus" not in st.session_state:
-        st.session_state.user_campus = ""
-    if "user_gender" not in st.session_state:
-        st.session_state.user_gender = ""
-    if "user_grade" not in st.session_state:
-        st.session_state.user_grade = ""
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "current_mode" not in st.session_state:
-        st.session_state.current_mode = "干活模式"
-    if "knowledge_base" not in st.session_state:
-        st.session_state.knowledge_base = None
-    if "last_tool_result" not in st.session_state:
-        st.session_state.last_tool_result = None
-
-def get_deepseek_api_key():
-    load_dotenv()
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    if not api_key:
-        api_key = st.secrets.get("DEEPSEEK_API_KEY", "")
-    return api_key
-
-def add_pwa_support():
-    manifest = {
-        "name": "广金万事屋",
-        "short_name": "广金万事屋",
-        "description": "专为广东金融学院学生打造的智能助手",
-        "start_url": ".",
-        "display": "standalone",
-        "background_color": "#ffffff",
-        "theme_color": "#e74c3c",
-        "orientation": "portrait",
-        "icons": [
-            {"src": AVATAR_URL, "sizes": "192x192", "type": "image/png"},
-            {"src": AVATAR_URL, "sizes": "512x512", "type": "image/png"}
-        ]
+def initialize_session_state() -> None:
+    defaults = {
+        "user_id": f"session-{uuid.uuid4()}",
+        "user_campus": "",
+        "user_grade": "",
+        "deepseek_api_key": get_deepseek_api_key(),
     }
-    manifest_str = json.dumps(manifest)
-    manifest_b64 = base64.b64encode(manifest_str.encode()).decode('utf-8')
-    st.markdown(f"""
-    <link rel="manifest" href="data:application/json;base64,{manifest_b64}">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="广金万事屋">
-    <link rel="apple-touch-icon" href="{AVATAR_URL}">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <link rel="shortcut icon" href="{AVATAR_URL}" type="image/png">
-    """, unsafe_allow_html=True)
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
-def main():
-    st.set_page_config(
-        page_title="广金万事屋师兄",
-        page_icon=AVATAR_URL,
-        layout="centered"
-    )
-    
-    add_pwa_support()
+
+def main() -> None:
+    st.set_page_config(page_title="广金大师兄", page_icon="🎓", layout="centered")
     initialize_session_state()
-    
-    st.title("🎓 广金万事屋师兄")
-    st.markdown("专为广东金融学院学生打造的智能助手")
-    
-    st.markdown("---")
-    
-    st.subheader("📝 填写个人信息")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        campus = st.selectbox(
-            "🏛️ 选择校区",
-            [""] + list(CAMPUSES.keys()),
-            index=list(CAMPUSES.keys()).index(st.session_state.user_campus) + 1 if st.session_state.user_campus else 0,
-            placeholder="请选择你的校区"
-        )
-    
-    with col2:
-        gender = st.selectbox(
-            "👤 选择性别",
-            ["", "男", "女"],
-            index=[0, 1, 2][["", "男", "女"].index(st.session_state.user_gender)] if st.session_state.user_gender else 0,
-            placeholder="请选择你的性别"
-        )
-    
-    grade = st.selectbox(
-        "🎓 选择年级",
-        [""] + GRADES,
-        index=GRADES.index(st.session_state.user_grade) + 1 if st.session_state.user_grade else 0,
-        placeholder="请选择你的年级"
+
+    st.title("🎓 广金大师兄")
+    st.caption("广东金融学院校园信息执行与位置服务 Agent")
+    st.info(format_current_time_prompt())
+
+    st.markdown(
+        """
+        - 把班群通知转成可确认、可追踪的待办与中国时区日历
+        - 按校区查询饭堂、教学楼、宿舍与生活服务地点
+        - 每条地点信息显示来源、核验时间、可信度和过期警告
+        """
     )
-    
-    api_key_input = st.text_input(
-        "🔑 DeepSeek API Key（选填）",
-        value=get_deepseek_api_key(),
+
+    campus = st.selectbox(
+        "选择校区",
+        [""] + list(CAMPUSES),
+        index=([""] + list(CAMPUSES)).index(st.session_state.user_campus),
+        placeholder="请选择校区",
+    )
+    grade = st.text_input(
+        "年级（选填）",
+        value=st.session_state.user_grade,
+        placeholder=f"例如：{current_year_china()}级；不填也可以使用",
+    )
+    api_key = st.text_input(
+        "DeepSeek API Key（选填，仅保存在当前会话）",
+        value=st.session_state.deepseek_api_key,
         type="password",
-        placeholder="输入API Key以获得更好的AI体验"
+        help="没有 Key 也可使用地图、任务和规则提取功能。",
     )
-    
-    if api_key_input:
-        os.environ["DEEPSEEK_API_KEY"] = api_key_input
-        os.environ["DEEPSEEK_BASE_URL"] = "https://api.deepseek.com/v1"
-    
-    st.markdown("---")
-    
-    can_proceed = campus and gender and grade
-    
-    if can_proceed:
-        if st.button("🚀 进入万事屋", use_container_width=True, type="primary"):
-            st.session_state.user_campus = campus
-            st.session_state.user_gender = gender
-            st.session_state.user_grade = grade
-            st.session_state.messages = []
-            st.switch_page(CAMPUSES[campus]["page"])
-    else:
-        st.button("🚀 进入万事屋", use_container_width=True, disabled=True)
-        missing_fields = []
-        if not campus:
-            missing_fields.append("校区")
-        if not gender:
-            missing_fields.append("性别")
-        if not grade:
-            missing_fields.append("年级")
-        st.warning(f"请先填写：{', '.join(missing_fields)}")
-    
-    st.markdown("---")
-    
-    if campus:
-        st.info(f"🏫 **{CAMPUSES[campus]['icon']} {campus}** - {CAMPUSES[campus]['location']}")
-    
-    st.markdown("""
-    **关于广金万事屋：**
-    
-    🎯 **干活模式**：处理班群通知生成日历，解析消费记录生成账单
-    🗺️ **生活向导**：查询校园路线、服务电话、实用建议
-    📰 **校园资讯**：获取广金最新通知和动态
-    
-    选择你的校区后，万事屋师兄会为你提供个性化的校园服务！
-    """)
+    st.session_state.user_campus = campus
+    st.session_state.user_grade = grade
+    st.session_state.deepseek_api_key = api_key
+
+    if st.button("进入校区 Agent", type="primary", width="stretch", disabled=not campus):
+        st.switch_page(CAMPUS_PAGES[campus])
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.page_link("pages/4_校园地图.py", label="🗺️ 校园地图", width="stretch")
+    with col2:
+        st.page_link("pages/6_任务中心.py", label="✅ 任务中心", width="stretch")
+    with col3:
+        st.page_link("pages/5_数据管理.py", label="🛠️ 数据管理", width="stretch")
+
+    st.divider()
+    st.warning(
+        "当前内置地点包含历史资料与演示占位数据。带‘待核验/历史’标记的内容不代表当前营业、今日菜单或精确 GPS。"
+    )
+
 
 if __name__ == "__main__":
     main()
