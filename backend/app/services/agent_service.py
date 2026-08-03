@@ -221,6 +221,29 @@ class AgentService:
         ]
         if named:
             rows = named
+        distance_reference: Location | None = None
+        if re.search(r"离.+近|哪个.+近|最近", message):
+            reference_query = (
+                select(Location)
+                .options(selectinload(Location.sources))
+                .where(
+                    Location.is_active.is_(True),
+                    Location.data_status != "demo_fixture",
+                    Location.map_x.is_not(None),
+                    Location.map_y.is_not(None),
+                )
+            )
+            if campus_id:
+                reference_query = reference_query.where(Location.campus_id == campus_id)
+            references = list(self.db.scalars(reference_query).unique())
+            distance_reference = next(
+                (
+                    item for item in references
+                    if item.category != "canteen"
+                    and any(name and name in message for name in [item.name, *item.aliases])
+                ),
+                None,
+            )
         data: list[dict] = []
         sources: list[dict] = []
         statuses: list[str] = []
@@ -228,39 +251,59 @@ class AgentService:
             stalls = [stall for stall in row.stalls if stall.is_active and stall.data_status != "demo_fixture"]
             if food:
                 stalls = [stall for stall in stalls if self._food_matches(message, stall)]
-            data.append(
-                {
-                    "id": row.id,
-                    "name": row.name,
-                    "area": row.location.area if row.location else "",
-                    "address": row.location.address if row.location else "",
-                    "floors": row.floors,
-                    "opening_hours": row.opening_hours,
-                    "verification_status": row.verification_status,
-                    "data_status": row.data_status,
-                    "verified_at": row.verified_at.isoformat() if row.verified_at else None,
-                    "stalls": [
-                        {
-                            "id": stall.id,
-                            "name": stall.name,
-                            "floor": stall.floor,
-                            "food_type": stall.food_type,
-                            "common_items": stall.common_items,
-                            "meal_periods": stall.meal_periods,
-                            "data_status": stall.data_status,
-                            "verified_at": stall.verified_at.isoformat() if stall.verified_at else None,
-                        }
-                        for stall in stalls
-                    ],
-                    "today_menu_available": False,
-                }
-            )
+            item_data = {
+                "id": row.id,
+                "name": row.name,
+                "area": row.location.area if row.location else "",
+                "address": row.location.address if row.location else "",
+                "floors": row.floors,
+                "opening_hours": row.opening_hours,
+                "verification_status": row.verification_status,
+                "data_status": row.data_status,
+                "verified_at": row.verified_at.isoformat() if row.verified_at else None,
+                "stalls": [
+                    {
+                        "id": stall.id,
+                        "name": stall.name,
+                        "floor": stall.floor,
+                        "food_type": stall.food_type,
+                        "common_items": stall.common_items,
+                        "meal_periods": stall.meal_periods,
+                        "data_status": stall.data_status,
+                        "verified_at": stall.verified_at.isoformat() if stall.verified_at else None,
+                    }
+                    for stall in stalls
+                ],
+                "today_menu_available": False,
+            }
+            if (
+                distance_reference
+                and row.location
+                and row.location.map_x is not None
+                and row.location.map_y is not None
+                and distance_reference.map_x is not None
+                and distance_reference.map_y is not None
+            ):
+                distance = (
+                    (row.location.map_x - distance_reference.map_x) ** 2
+                    + (row.location.map_y - distance_reference.map_y) ** 2
+                ) ** 0.5
+                item_data["schematic_distance"] = round(distance, 4)
+                item_data["distance_note"] = f"按非测绘示意坐标，与{distance_reference.name}的相对距离值为 {distance:.3f}"
+            data.append(item_data)
             statuses.append(row.data_status)
             statuses.extend(stall.data_status for stall in stalls)
             if row.source:
                 sources.append(self._source(row.source))
-        has_stalls = any(item["stalls"] for item in data)
-        if food and has_stalls:
+        if distance_reference and any("schematic_distance" in item for item in data):
+            data.sort(key=lambda item: item.get("schematic_distance", float("inf")))
+            answer = (
+                f"按当前非测绘示意坐标，{data[0]['name']}与{distance_reference.name}的相对位置更近；"
+                "这不是步行距离或路线结果，且点位资料可能已经变化。"
+            )
+            if distance_reference.sources:
+                sources.extend(self._source(source) for source in distance_reference.sources)
+        elif food and any(item["stalls"] for item in data):
             answer = "目前没有可靠的当日菜单数据，以下是最近一次核验的档口或常见餐品信息，不保证今日全部供应。"
         elif food:
             answer = "目前没有可靠的当日菜单数据，也没有匹配的可公开档口或常见餐品记录；系统不会编造今日供应。"

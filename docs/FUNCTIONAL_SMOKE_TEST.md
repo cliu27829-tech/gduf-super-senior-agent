@@ -39,7 +39,7 @@
 - `npm run build`：通过，Vite 生产包成功生成。
 - `npm run test:e2e`：1/1 通过，覆盖注册到账号清理的完整流程。
 - `python -m compileall -q app`：通过。
-- `pytest`：41/41 通过，模型调用均为 Mock 或无 Key 降级。
+- `pytest`：41/41 通过，覆盖“哪个饭堂离北教比较近”的非测绘示意坐标排序；模型调用均为 Mock 或无 Key 降级。
 - `alembic upgrade head`：本地开发库升级到 `20260804_02`，新字段存在。
 
 ## 已知环境限制

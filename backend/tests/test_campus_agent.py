@@ -103,6 +103,12 @@ def test_agent_routes_location_food_and_campus_card_process_to_tools(client: Tes
     assert process.json()["tool_results"][0]["tool"] == "process_search"
     assert process.json()["tool_results"][0]["data"]
 
+    distance = client.post("/api/agent/chat", json={"message": "哪个饭堂离北教比较近？", "campus_id": campus_id})
+    assert distance.status_code == 200
+    assert distance.json()["intent"] == "canteen_search"
+    assert "非测绘示意坐标" in distance.json()["answer"]
+    assert distance.json()["tool_results"][0]["data"][0]["name"] == "北苑饭堂"
+
 
 def test_conversations_are_private_between_users(client: TestClient, register_user):
     register_user("conversation-owner")
