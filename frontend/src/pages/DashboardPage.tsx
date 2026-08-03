@@ -11,7 +11,8 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { Promise.all([api<Task[]>("/tasks"), api<Campus[]>("/campuses")]).then(([taskRows, campusRows]) => { setTasks(taskRows); setCampuses(campusRows); }).finally(() => setLoading(false)); }, []);
+  const [error, setError] = useState("");
+  useEffect(() => { Promise.all([api<Task[]>("/tasks"), api<Campus[]>("/campuses")]).then(([taskRows, campusRows]) => { setTasks(taskRows); setCampuses(campusRows); }).catch((reason) => setError(reason instanceof Error ? reason.message : "工作台加载失败")).finally(() => setLoading(false)); }, []);
   if (loading) return <Loading />;
   const now = Date.now();
   const today = tasks.filter((task) => task.deadline && new Date(task.deadline).toDateString() === new Date().toDateString() && task.status === "pending");
@@ -20,6 +21,7 @@ export default function DashboardPage() {
   const campus = campuses.find((item) => item.id === user?.campus_id);
   return (
     <section className="page section-wrap">
+      {error && <div className="error-banner" role="alert">{error}</div>}
       <div className="page-heading"><div><p className="eyebrow">我的工作台</p><h1>{user?.nickname || user?.username}，今天先做哪一件？</h1><p>{campus?.name || "尚未选择校区"} · 中国标准时间</p></div><Link className="button" to="/notifications">粘贴一条通知</Link></div>
       <div className="metric-grid"><article><span>今日任务</span><strong>{today.length}</strong><small>今天截止</small></article><article><span>即将截止</span><strong>{upcoming.length}</strong><small>未来 7 天</small></article><article className={overdue.length ? "danger-metric" : ""}><span>已逾期</span><strong>{overdue.length}</strong><small>需要尽快处理</small></article><article><span>全部任务</span><strong>{tasks.length}</strong><small>含已完成</small></article></div>
       <div className="dashboard-grid">
@@ -30,4 +32,3 @@ export default function DashboardPage() {
     </section>
   );
 }
-

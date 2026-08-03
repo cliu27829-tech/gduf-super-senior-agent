@@ -74,6 +74,7 @@ export type Stall = {
   payment_methods: string[];
   is_operating: boolean | null;
   verification_status: string;
+  data_status: string;
   verified_at: string | null;
   confidence: number;
 };
@@ -87,6 +88,7 @@ export type Canteen = {
   opening_hours: string;
   payment_methods: string[];
   verification_status: string;
+  data_status: string;
   verified_at: string | null;
   confidence: number;
   source: Source | null;
@@ -104,7 +106,9 @@ export type Task = {
   course: string;
   task_type: string;
   materials: string[];
+  submission_target: string;
   submission_method: string;
+  file_naming: string;
   source_text: string;
   source_url: string;
   status: "pending" | "completed";
@@ -119,11 +123,13 @@ export type NotificationDraft = {
   deadline: string | null;
   location: string;
   materials: string[];
+  submission_target: string;
   submission_method: string;
+  file_naming: string;
+  notes: string;
   source_text: string;
   source_url: string;
   needs_confirmation: boolean;
   confidence: number;
   date_explanation: string;
 };
-

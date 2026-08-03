@@ -21,12 +21,13 @@ export default function MapPage() {
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState("");
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  useEffect(() => { api<Campus[]>("/campuses").then((rows) => { setCampuses(rows); setCampusId((current) => current || rows[0]?.id || ""); }); }, []);
+  useEffect(() => { api<Campus[]>("/campuses").then((rows) => { setCampuses(rows); setCampusId((current) => current || rows[0]?.id || ""); }).catch((reason) => { setError(reason instanceof Error ? reason.message : "校区加载失败"); setLoading(false); }); }, []);
   useEffect(() => {
     if (!campusId) return;
-    setLoading(true); setSelected(null);
-    api<Location[]>(`/locations?campus_id=${encodeURIComponent(campusId)}`).then(setLocations).catch(() => setLocations([])).finally(() => setLoading(false));
+    setLoading(true); setSelected(null); setError("");
+    api<Location[]>(`/locations?campus_id=${encodeURIComponent(campusId)}`).then(setLocations).catch((reason) => { setLocations([]); setError(reason instanceof Error ? reason.message : "地点加载失败"); }).finally(() => setLoading(false));
   }, [campusId]);
 
   const filtered = useMemo(() => locations.filter((item) => {
@@ -48,6 +49,7 @@ export default function MapPage() {
     <section className="page section-wrap map-page">
       <div className="page-heading"><div><p className="eyebrow">校园地图</p><h1>先选校区，再找准确地点</h1><p>示意坐标只表示相对位置；精确 GPS 和步行路线以外部地图为准。</p></div><select aria-label="选择校区" value={campusId} onChange={(e) => setCampusId(e.target.value)}>{campuses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
       <div className="map-toolbar"><label className="search-box"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索教学楼、饭堂、快递…" /></label><div className="filter-chips">{categories.map(([value, label]) => <button key={value} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>{label}</button>)}</div></div>
+      {error && <div className="error-banner" role="alert">{error}</div>}
       {campus && <div className="data-notice compact-notice"><strong>{campus.name}</strong><p>{campus.data_notice}</p></div>}
       {loading ? <Loading /> : <div className="map-layout">
         <div className="schematic-map" aria-label={`${campus?.name || "校区"}示意地图`}>
@@ -58,8 +60,7 @@ export default function MapPage() {
         </div>
         <aside className="location-list"><div className="panel-heading"><h2>地点列表</h2><span>{filtered.length} 条</span></div>{filtered.length ? filtered.map((item) => <button className={selected?.id === item.id ? "location-row active" : "location-row"} key={item.id} onClick={() => setSelected(item)}><span className={`category-icon category-${item.category}`}>{item.category === "canteen" ? "食" : "⌖"}</span><div><strong>{item.name}</strong><small>{item.area || item.address || "位置待核验"}</small></div><StatusBadge value={item.verification_status} /></button>) : <EmptyState title="没有匹配地点" detail="换个关键词或切换分类试试。" />}</aside>
       </div>}
-      {selected && <div className="drawer-backdrop" onClick={() => setSelected(null)}><aside className="detail-drawer" onClick={(e) => e.stopPropagation()} aria-label="地点详情"><button className="drawer-close" onClick={() => setSelected(null)} aria-label="关闭">×</button><p className="eyebrow">地点详情</p><h2>{selected.name}</h2><div className="badge-row"><StatusBadge value={selected.verification_status} /><StatusBadge value={selected.freshness_status} /></div><dl><dt>位置</dt><dd>{selected.area || selected.address || "待核验"}</dd><dt>开放时间</dt><dd>{selected.opening_hours || "待核验"}</dd><dt>最后核验</dt><dd>{formatDate(selected.verified_at)}</dd><dt>数据更新</dt><dd>{formatDate(selected.updated_at)}</dd><dt>可信度</dt><dd>{Math.round(selected.confidence * 100)}%</dd></dl><p>{selected.description || "暂无说明"}</p><a className="button full" href={navigationUrl} target="_blank" rel="noreferrer">打开外部地图导航</a><div className="source-list"><h3>数据来源</h3>{selected.sources.length ? selected.sources.map((source) => <a href={source.url || undefined} target="_blank" rel="noreferrer" key={source.id}><strong>{source.title}</strong><small>{source.publisher || "来源待补充"} · {source.is_official ? "官方" : "非官方线索"}</small></a>) : <p>暂无可公开来源，条目仍待核验。</p>}</div><form className="feedback-form" onSubmit={submitFeedback}><h3>发现信息不准确？</h3><textarea minLength={5} required value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="说明哪里不准确，最好附上可核验线索" /><button className="ghost-button" type="submit">提交纠错</button>{message && <small role="status">{message}</small>}</form></aside></div>}
+      {selected && <div className="drawer-backdrop" onClick={() => setSelected(null)}><aside className="detail-drawer" onClick={(e) => e.stopPropagation()} aria-label="地点详情"><button className="drawer-close" onClick={() => setSelected(null)} aria-label="关闭">×</button><p className="eyebrow">地点详情</p><h2>{selected.name}</h2><div className="badge-row"><StatusBadge value={selected.verification_status} /><StatusBadge value={selected.freshness_status} /><span className={`status-badge status-${selected.data_status}`}>{selected.data_status === "historical" ? "历史资料" : selected.data_status === "current" ? "当前资料" : "待核验"}</span></div>{selected.data_status === "historical" && <p className="date-warning">这是历史资料，位置或服务可能已经变化，请通过来源或校方电话再次确认。</p>}<dl><dt>区域</dt><dd>{selected.area || "待核验"}</dd><dt>详细位置</dt><dd>{[selected.address, selected.floor].filter(Boolean).join(" · ") || "待核验"}</dd><dt>别名</dt><dd>{selected.aliases.join("、") || "无"}</dd><dt>开放时间</dt><dd>{selected.opening_hours || "待核验"}</dd><dt>可办服务</dt><dd>{selected.services.join("、") || "待核验"}</dd><dt>资料核验</dt><dd>{formatDate(selected.verified_at)}</dd><dt>数据更新</dt><dd>{formatDate(selected.updated_at)}</dd><dt>可信度</dt><dd>{Math.round(selected.confidence * 100)}%</dd></dl><p>{selected.description || "暂无说明"}</p><a className="button full" href={navigationUrl} target="_blank" rel="noreferrer">打开外部地图查询</a><div className="source-list"><h3>数据来源</h3>{selected.sources.length ? selected.sources.map((source) => source.url ? <a href={source.url} target="_blank" rel="noreferrer" key={source.id}><strong>{source.title}</strong><small>{source.publisher || "来源待补充"} · {source.is_official ? "官方" : "非官方线索"}</small></a> : <div key={source.id}><strong>{source.title}</strong><small>{source.publisher || "来源待补充"}</small></div>) : <p>暂无可公开来源，条目仍待核验。</p>}</div><form className="feedback-form" onSubmit={submitFeedback}><h3>发现信息不准确？</h3><textarea minLength={5} required value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="说明哪里不准确，最好附上可核验线索" /><button className="ghost-button" type="submit">提交纠错</button>{message && <small role="status">{message}</small>}</form></aside></div>}
     </section>
   );
 }
-
