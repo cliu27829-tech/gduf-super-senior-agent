@@ -1,6 +1,12 @@
 from fastapi.testclient import TestClient
 
-from app.services.agent_service import AgentService
+from app.core.llm_client import (
+    LLMAuthenticationError,
+    LLMNotConfiguredError,
+    LLMTimeoutError,
+    get_llm_client,
+)
+from app.main import app
 
 
 def _task(title: str) -> dict:
@@ -54,7 +60,7 @@ def test_agent_uses_persistent_task_tool_and_conversation(client: TestClient, re
     assert first.status_code == 200, first.text
     body = first.json()
     assert body["intent"] == "task_management"
-    assert body["degraded"] is True
+    assert body["degraded"] is False
     assert body["tool_results"][0]["tool"] == "task_list"
     assert any(row["title"] == "Agent 可见任务" for row in body["tool_results"][0]["data"])
 
@@ -118,41 +124,95 @@ def test_conversations_are_private_between_users(client: TestClient, register_us
     assert client.post("/api/agent/chat", json={"message": "继续", "conversation_id": conversation_id}).status_code == 404
 
 
-def test_agent_llm_planner_and_answer_use_mocked_model(monkeypatch, client: TestClient, register_user):
+def test_agent_llm_planner_and_answer_use_mocked_model(client: TestClient, register_user, mock_llm):
     register_user("mock-agent")
-    settings = type("S", (), {
-        "deepseek_api_key": "mock-key",
-        "deepseek_base_url": "https://mock.invalid",
-        "deepseek_model": "mock-model",
-    })()
-    monkeypatch.setattr("app.services.agent_service.get_settings", lambda: settings)
-
-    def fake_model(self, system_prompt: str, user_message: str) -> dict:
-        del self, user_message
-        if "意图规划器" in system_prompt:
-            return {"intent": "learning_guidance", "confidence": 0.97, "query": "高数", "tool_plan": []}
-        return {"answer": "这是由测试中的模拟模型生成的学习计划。"}
-
-    monkeypatch.setattr(AgentService, "_model_json", fake_model)
     response = client.post("/api/agent/chat", json={"message": "高数跟不上怎么办"})
     assert response.status_code == 200
     assert response.json()["degraded"] is False
-    assert "模拟模型" in response.json()["answer"]
+    assert "Mock LLM" in response.json()["answer"]
+    assert len(mock_llm.calls) == 2
 
 
-def test_agent_model_failure_returns_degraded_error_id(monkeypatch, client: TestClient, register_user):
+def test_agent_model_timeout_returns_explicit_error(client: TestClient, register_user, mock_llm):
     register_user("failed-agent")
-    settings = type("S", (), {
-        "deepseek_api_key": "mock-key",
-        "deepseek_base_url": "https://mock.invalid",
-        "deepseek_model": "mock-model",
-    })()
-    monkeypatch.setattr("app.services.agent_service.get_settings", lambda: settings)
-    monkeypatch.setattr(AgentService, "_model_json", lambda *_args, **_kwargs: (_ for _ in ()).throw(TimeoutError("mock timeout")))
+
+    class TimeoutLLM:
+        configured = True
+        model = "mock-deepseek-v4-flash"
+
+        async def chat_completion(self, *_args, **_kwargs):
+            raise LLMTimeoutError()
+
+    app.dependency_overrides[get_llm_client] = TimeoutLLM
     response = client.post("/api/agent/chat", json={"message": "你好，你能做什么？"})
-    assert response.status_code == 200
-    assert response.json()["degraded"] is True
-    assert len(response.json()["error_id"]) == 12
+    assert response.status_code == 504
+    assert "响应超时" in response.json()["detail"]
+    assert "错误编号" in response.json()["detail"]
+    app.dependency_overrides[get_llm_client] = lambda: mock_llm
+
+
+def test_agent_status_and_unconfigured_model_are_explicit(client: TestClient, register_user, mock_llm):
+    class UnconfiguredLLM:
+        configured = False
+        model = "deepseek-v4-flash"
+
+        async def chat_completion(self, *_args, **_kwargs):
+            raise LLMNotConfiguredError()
+
+    app.dependency_overrides[get_llm_client] = UnconfiguredLLM
+    status = client.get("/api/agent/status")
+    assert status.status_code == 200
+    assert status.json() == {
+        "backend": "ok",
+        "llm_configured": False,
+        "model": "deepseek-v4-flash",
+        "database": "ok",
+    }
+    register_user("unconfigured-agent")
+    response = client.post("/api/agent/chat", json={"message": "你好"})
+    assert response.status_code == 503
+    assert "尚未配置大模型密钥" in response.json()["detail"]
+    app.dependency_overrides[get_llm_client] = lambda: mock_llm
+
+
+def test_agent_authentication_failure_does_not_leak_key(client: TestClient, register_user, mock_llm):
+    sentinel_key = "sensitive-test-key-that-must-not-leak"
+
+    class AuthenticationFailureLLM:
+        configured = True
+        model = "deepseek-v4-flash"
+
+        async def chat_completion(self, *_args, **_kwargs):
+            raise LLMAuthenticationError()
+
+    app.dependency_overrides[get_llm_client] = AuthenticationFailureLLM
+    register_user("auth-failure-agent")
+    response = client.post("/api/agent/chat", json={"message": "你好"})
+    assert response.status_code == 502
+    assert "认证失败" in response.json()["detail"]
+    assert sentinel_key not in response.text
+    app.dependency_overrides[get_llm_client] = lambda: mock_llm
+
+
+def test_agent_rejects_blank_message(client: TestClient, register_user):
+    register_user("blank-agent")
+    response = client.post("/api/agent/chat", json={"message": "   "})
+    assert response.status_code == 422
+
+
+def test_agent_sends_recent_history_for_multi_turn_memory(client: TestClient, register_user, mock_llm):
+    register_user("history-agent")
+    first = client.post("/api/agent/chat", json={"message": "我叫小明，请记住。"})
+    assert first.status_code == 200
+    second = client.post(
+        "/api/agent/chat",
+        json={"message": "我刚才说我叫什么？", "conversation_id": first.json()["conversation_id"]},
+    )
+    assert second.status_code == 200
+    assert "小明" in second.json()["answer"]
+    answer_call = mock_llm.calls[-1]
+    assert any(item["role"] == "user" and "我叫小明" in item["content"] for item in answer_call)
+    assert any(item["role"] == "assistant" for item in answer_call)
 
 
 def test_location_feedback_is_authenticated_and_persisted(client: TestClient, register_user, campus_id: str):

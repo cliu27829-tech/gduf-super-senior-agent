@@ -34,7 +34,7 @@ class NotificationDraft:
 
 
 class NotificationService:
-    def __init__(self, base_url: str = "https://api.deepseek.com/v1", model: str = "deepseek-chat"):
+    def __init__(self, base_url: str = "https://api.deepseek.com", model: str = "deepseek-v4-flash"):
         self.base_url = base_url
         self.model = model
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AgentChatRequest(BaseModel):
@@ -10,6 +10,21 @@ class AgentChatRequest(BaseModel):
     conversation_id: str | None = None
     campus_id: str | None = None
     campus: str | None = Field(default=None, max_length=64)
+
+    @field_validator("message")
+    @classmethod
+    def reject_blank_message(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("消息不能为空")
+        return normalized
+
+
+class AgentStatusResponse(BaseModel):
+    backend: str
+    llm_configured: bool
+    model: str
+    database: str
 
 
 class ToolResult(BaseModel):

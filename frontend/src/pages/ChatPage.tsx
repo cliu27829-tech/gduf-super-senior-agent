@@ -8,11 +8,12 @@ type Source = { title?: string; url?: string; publisher?: string; published_at?:
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; intent?: string; tool_results?: ToolResult[]; sources?: Source[]; degraded?: boolean; error_id?: string | null; data_status?: string };
 type Conversation = { id: string; title: string; updated_at: string };
 type ChatResponse = { conversation_id: string; message_id: string; intent: string; answer: string; tool_results: ToolResult[]; sources: Source[]; degraded: boolean; error_id: string | null; data_status: string };
+type AgentStatus = { backend: string; llm_configured: boolean; model: string; database: string };
 
 const welcome = (): ChatMessage => ({
   id: "welcome",
   role: "assistant",
-  content: "你好，我是广金大师兄。你可以直接提问；校园事实会调用数据库工具，模型未配置时会明确标注基础模式。",
+  content: "你好，我是广金大师兄。模型连接正常后，你可以在这里进行多轮对话。",
 });
 
 export default function ChatPage() {
@@ -24,13 +25,23 @@ export default function ChatPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [failedMessage, setFailedMessage] = useState("");
+  const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+  const [statusError, setStatusError] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
   const loadConversations = async () => {
     try { setConversations(await api<Conversation[]>("/agent/conversations")); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "对话历史加载失败"); }
   };
-  useEffect(() => { void loadConversations(); }, []);
+  const loadAgentStatus = async () => {
+    setStatusError("");
+    try { setAgentStatus(await api<AgentStatus>("/agent/status")); }
+    catch (reason) {
+      setAgentStatus(null);
+      setStatusError(reason instanceof Error ? reason.message : "无法读取大模型状态");
+    }
+  };
+  useEffect(() => { void loadConversations(); void loadAgentStatus(); }, []);
   useEffect(() => { if (typeof endRef.current?.scrollIntoView === "function") endRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, busy]);
 
   const newConversation = () => {
@@ -60,13 +71,17 @@ export default function ChatPage() {
 
   const send = async (content: string, appendUser = true) => {
     if (!content.trim() || busy) return;
+    if (!agentStatus?.llm_configured) {
+      setError("后端已连接，但尚未配置大模型密钥。");
+      return;
+    }
     setError(""); setFailedMessage(""); setBusy(true);
     if (appendUser) setMessages((current) => [...current, { id: `local-${Date.now()}`, role: "user", content }]);
     try {
       const result = await api<ChatResponse>("/agent/chat", {
         method: "POST",
         body: JSON.stringify({ message: content, conversation_id: conversationId, campus_id: user?.campus_id }),
-        timeoutMs: 30000,
+        timeoutMs: 75000,
       });
       setConversationId(result.conversation_id);
       setMessages((current) => [...current, {
@@ -90,6 +105,10 @@ export default function ChatPage() {
     event.preventDefault();
     const content = input.trim();
     if (!content) return;
+    if (!agentStatus?.llm_configured) {
+      setError("后端已连接，但尚未配置大模型密钥。");
+      return;
+    }
     setInput("");
     void send(content);
   };
@@ -102,14 +121,17 @@ export default function ChatPage() {
         {!conversations.length && <p>还没有保存的对话</p>}
       </aside>
       <div className="chat-main">
-        <header><p className="eyebrow">AI 对话</p><h1>问问大师兄</h1><p>地点、饭堂和流程由工具查询；通用建议在模型可用时由模型生成。</p></header>
+        <header><p className="eyebrow">AI 对话</p><h1>问问大师兄</h1><p>回答由后端连接的真实大模型生成，多轮上下文保存在你的对话记录中。</p></header>
+        {agentStatus && !agentStatus.llm_configured && <div className="degraded-note" role="status">后端已连接，但尚未配置大模型密钥。<button className="text-link" onClick={() => void loadAgentStatus()}>重新检查</button></div>}
+        {agentStatus?.llm_configured && <div className="degraded-note" role="status">大模型已连接：{agentStatus.model}</div>}
+        {statusError && <div className="error-banner" role="alert">模型状态检查失败：{statusError}<button className="ghost-button compact" onClick={() => void loadAgentStatus()}>重新检查</button></div>}
         <div className="message-list" aria-live="polite">
           {messages.map((message) => <article className={`message ${message.role}`} key={message.id}><div className="message-avatar">{message.role === "assistant" ? "广" : (user?.nickname || "我").slice(0, 1)}</div><div className="message-body"><p>{message.content}</p>{message.intent && <small className="intent-label">意图：{message.intent}</small>}{message.degraded && <div className="degraded-note">基础模式：当前未使用可用的大模型回答。数据库查询仍然真实可用，请核对不确定日期。{message.error_id ? ` 错误编号：${message.error_id}` : ""}</div>}{message.data_status === "needs_verification" && <div className="date-warning">结果包含历史或待核验数据，请查看来源与日期。</div>}{message.tool_results?.map((tool, index) => <ToolCard tool={tool} key={`${message.id}-${index}`} />)}{message.sources && message.sources.length > 0 && <div className="chat-sources"><strong>来源</strong>{message.sources.map((source, index) => <a href={source.url || undefined} target="_blank" rel="noreferrer" key={`${source.url}-${index}`}><span>{source.title || "来源"}</span><small>{source.publisher || "发布方未注明"}{source.published_at ? ` · 发布 ${new Date(source.published_at).toLocaleDateString("zh-CN")}` : ""}{source.verified_at ? ` · 核验 ${new Date(source.verified_at).toLocaleDateString("zh-CN")}` : ""}</small></a>)}</div>}</div></article>)}
-          {busy && <article className="message assistant"><div className="message-avatar">广</div><div className="message-body typing">正在判断意图并调用工具…</div></article>}
+          {busy && <article className="message assistant"><div className="message-avatar">广</div><div className="message-body typing">正在等待大模型回答…</div></article>}
           <div ref={endRef} />
         </div>
         {error && <div className="error-banner" role="alert">{error}{failedMessage && <button className="ghost-button compact" onClick={() => void send(failedMessage, false)}>重新发送</button>}</div>}
-        <form className="chat-composer" onSubmit={submit}><textarea aria-label="消息" rows={2} value={input} onChange={(event) => setInput(event.target.value)} placeholder="例如：北苑有什么吃的？或大一高数跟不上怎么办？" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="button" disabled={busy || !input.trim()}>发送</button><small>Enter 发送 · Shift + Enter 换行</small></form>
+        <form className="chat-composer" onSubmit={submit}><textarea aria-label="消息" rows={2} value={input} onChange={(event) => setInput(event.target.value)} placeholder="例如：你好，你能做什么？" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="button" disabled={busy || !input.trim() || !agentStatus?.llm_configured}>发送</button><small>Enter 发送 · Shift + Enter 换行</small></form>
       </div>
     </section>
   );

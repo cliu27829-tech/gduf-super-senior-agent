@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-DEEPSEEK_CHAT_MODEL = os.getenv("DEEPSEEK_CHAT_MODEL", "deepseek-chat")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_CHAT_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
 
 def get_setting(name: str, default: Any = "") -> Any:

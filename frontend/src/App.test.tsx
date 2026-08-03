@@ -87,6 +87,7 @@ describe("campus workflows", () => {
     vi.stubGlobal("fetch", routeFetch({
       "/api/auth/me": user,
       "/api/agent/conversations": [],
+      "/api/agent/status": { backend: "ok", llm_configured: true, model: "deepseek-v4-flash", database: "ok" },
       "/api/agent/chat": {
         conversation_id: "conversation-1", message_id: "message-1", intent: "campus_location_search",
         answer: "图书馆位于东区。", degraded: false, data_status: "verified",
@@ -95,11 +96,39 @@ describe("campus workflows", () => {
       },
     }));
     renderAt("/chat", <App />);
+    expect(await screen.findByText("大模型已连接：deepseek-v4-flash")).toBeInTheDocument();
     await userEvent.type(await screen.findByLabelText("消息"), "图书馆在哪里？");
     await userEvent.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByText("图书馆位于东区。")).toBeInTheDocument();
     expect(screen.getByText("校园地点")).toBeInTheDocument();
     expect(screen.getByText("校方地点说明")).toBeInTheDocument();
+  });
+
+  it("shows an explicit warning and disables sending when the model is not configured", async () => {
+    vi.stubGlobal("fetch", routeFetch({
+      "/api/auth/me": user,
+      "/api/agent/conversations": [],
+      "/api/agent/status": { backend: "ok", llm_configured: false, model: "deepseek-v4-flash", database: "ok" },
+    }));
+    renderAt("/chat", <App />);
+    expect(await screen.findByText(/后端已连接，但尚未配置大模型密钥/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("消息"), "你好");
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  });
+
+  it("shows the backend model error instead of a fake answer", async () => {
+    vi.stubGlobal("fetch", routeFetch({
+      "/api/auth/me": user,
+      "/api/agent/conversations": [],
+      "/api/agent/status": { backend: "ok", llm_configured: true, model: "deepseek-v4-flash", database: "ok" },
+      "/api/agent/chat": () => json({ detail: "大模型响应超时，请稍后重试。错误编号：mock-error" }, 504),
+    }));
+    renderAt("/chat", <App />);
+    expect(await screen.findByText("大模型已连接：deepseek-v4-flash")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("消息"), "你好");
+    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("大模型响应超时");
+    expect(screen.queryByText("这是固定回答")).not.toBeInTheDocument();
   });
 
   it("shows canteen records with a non-realtime warning", async () => {

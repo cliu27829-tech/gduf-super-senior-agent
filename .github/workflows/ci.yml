@@ -83,17 +83,20 @@ jobs:
           ENVIRONMENT: test
           AUTO_CREATE_SCHEMA: "false"
           SEED_DEMO_DATA: "true"
-          DEEPSEEK_API_KEY: ""
+          DEEPSEEK_API_KEY: "e2e-mock-key"
+          DEEPSEEK_BASE_URL: "http://127.0.0.1:8001"
+          DEEPSEEK_MODEL: "deepseek-v4-flash"
         run: |
           cd backend
           python -m alembic upgrade head
+          nohup python -m uvicorn fake_llm_server:app --app-dir tests --host 127.0.0.1 --port 8001 >/tmp/gduf-fake-llm.log 2>&1 &
           nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 >/tmp/gduf-backend.log 2>&1 &
           cd ../frontend
           nohup npm run dev -- --host 127.0.0.1 >/tmp/gduf-frontend.log 2>&1 &
           python - <<'PY'
           import time
           import urllib.request
-          for url in ("http://127.0.0.1:8000/ready", "http://127.0.0.1:5173/"):
+          for url in ("http://127.0.0.1:8001/health", "http://127.0.0.1:8000/ready", "http://127.0.0.1:5173/"):
               for _ in range(60):
                   try:
                       urllib.request.urlopen(url, timeout=2)

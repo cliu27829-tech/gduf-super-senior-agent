@@ -37,7 +37,7 @@ ADMIN_BOOTSTRAP_PASSWORD=...
 DEEPSEEK_API_KEY=...  # 可空；空时规则降级
 ```
 
-4. Vercel 新建项目，Root Directory 设为 `frontend`，Build Command `npm run build`，Output `dist`，添加 `VITE_API_URL=https://<render-domain>` 后重新部署。
+4. Vercel 新建项目，Root Directory 设为 `frontend`，Build Command `npm run build`，Output `dist`，添加 `VITE_API_BASE_URL=https://<render-domain>` 后重新部署。
 5. 跨站 Cookie 依赖浏览器第三方 Cookie 策略。生产更推荐在 Vercel 配置 `/api/:path*` 到 Render 的同源 rewrite，或改用自有同主域名；生成后端域名后再把确定 URL 写入项目设置，不提交占位 URL。
 6. 首次管理员登录后立即改密码，随后从平台删除 `ADMIN_BOOTSTRAP_PASSWORD` 并重新部署（已有账户不会被覆盖）。
 

@@ -26,8 +26,12 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     cookie_samesite: str = "lax"
     deepseek_api_key: str = ""
-    deepseek_base_url: str = "https://api.deepseek.com/v1"
-    deepseek_model: str = "deepseek-chat"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-v4-flash"
+    llm_connect_timeout_seconds: float = 10.0
+    llm_read_timeout_seconds: float = 60.0
+    llm_max_retries: int = 2
+    llm_history_messages: int = 20
     admin_bootstrap_email: str = ""
     admin_bootstrap_password: str = ""
     data_root: Path = PROJECT_ROOT / "data"
@@ -78,4 +82,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

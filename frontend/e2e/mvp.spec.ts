@@ -35,6 +35,7 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   await expect(page.getByRole("heading", { name: /端到端同学，今天先做哪一件/ })).toBeVisible();
   await page.getByRole("link", { name: "问师兄" }).first().click();
   await expect(page.getByRole("heading", { name: "问问大师兄" })).toBeVisible();
+  await expect(page.getByText("大模型已连接：deepseek-v4-flash")).toBeVisible();
   await expect(page.locator(".message.assistant")).toHaveCount(1);
 
   const send = async (message: string) => {
@@ -48,10 +49,14 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
 
   const greeting = await send("你好，你能做什么？");
   await expect(greeting).toContainText("广金大师兄");
-  await expect(greeting).toContainText("基础模式");
+  await expect(greeting).not.toContainText("基础模式");
 
   const guidance = await send("大一高数跟不上怎么办？");
   await expect(guidance).toContainText(/概念|错题|基础题/);
+
+  await send("我叫小明，请记住。");
+  const memory = await send("我刚才说我叫什么？");
+  await expect(memory).toContainText("小明");
 
   const food = await send("北苑饭堂有什么吃的？");
   await expect(food).toContainText("当日菜单");

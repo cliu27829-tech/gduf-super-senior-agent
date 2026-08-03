@@ -1,20 +1,38 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response, status
-from sqlalchemy import select
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import CurrentUser, DbSession
+from app.core.llm_client import LLMClient, LLMClientError, get_llm_client
 from app.models.entities import Campus, Conversation, Message
-from app.schemas.agent import AgentChatRequest, AgentChatResponse
+from app.schemas.agent import AgentChatRequest, AgentChatResponse, AgentStatusResponse
 from app.services.agent_service import AgentService
 
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+LLMDependency = Annotated[LLMClient, Depends(get_llm_client)]
+
+
+@router.get("/status", response_model=AgentStatusResponse)
+def agent_status(db: DbSession, llm: LLMDependency) -> AgentStatusResponse:
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="数据库暂时不可用") from exc
+    return AgentStatusResponse(
+        backend="ok",
+        llm_configured=llm.configured,
+        model=llm.model,
+        database="ok",
+    )
 
 
 @router.post("/chat", response_model=AgentChatResponse)
-def chat(payload: AgentChatRequest, user: CurrentUser, db: DbSession) -> AgentChatResponse:
+async def chat(payload: AgentChatRequest, user: CurrentUser, db: DbSession, llm: LLMDependency) -> AgentChatResponse:
     campus_id = payload.campus_id
     if payload.campus:
         campus = db.scalar(
@@ -28,7 +46,15 @@ def chat(payload: AgentChatRequest, user: CurrentUser, db: DbSession) -> AgentCh
         campus_id = campus.id
     elif campus_id and not db.scalar(select(Campus.id).where(Campus.id == campus_id, Campus.is_active.is_(True))):
         raise HTTPException(status_code=422, detail="校区不存在")
-    return AgentService(db).chat(user, payload.message, payload.conversation_id, campus_id)
+    try:
+        return await AgentService(db, llm).chat(user, payload.message, payload.conversation_id, campus_id)
+    except LLMClientError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=f"{exc.public_message} 错误编号：{exc.error_id}",
+            headers={"X-Error-ID": exc.error_id},
+        ) from exc
 
 
 @router.get("/conversations")

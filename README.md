@@ -21,7 +21,7 @@
 - 饭堂、楼层、档口、常见餐品及核验状态；没有可靠今日菜单时明确返回“无实时数据”。
 - TXT/PDF 通知解析、可编辑预览、确认后批量入库，图片 OCR 明确标记为未启用。
 - 任务增删改查、今日/本周/临期/逾期/完成视图、批量操作与 `Asia/Shanghai` ICS 双提醒。
-- Agent 对话历史、模型 JSON 意图规划、真实数据库工具调用、工具/来源卡片、失败重试与可见规则降级。
+- Agent 多轮对话历史、模型 JSON 意图规划、真实数据库工具调用、工具/来源卡片、失败重试与明确模型错误。
 - 基于角色的管理后台：用户、校区、地点、地图、饭堂、档口、流程、来源、纠错、陈旧数据、日志和导入导出。
 
 ## 技术架构
@@ -35,7 +35,7 @@ Browser
                  └─ PostgreSQL 16（测试可用 SQLite）
 ```
 
-LLM 正常模式使用 DeepSeek 兼容 API 输出 JSON 并通过 Pydantic 校验；未配置或调用失败时只使用可见的规则降级。校园事实始终来自数据库工具，不让模型补写地点、电话、档口、菜单或制度。
+聊天使用后端统一模型客户端调用 `deepseek-v4-flash`，意图 JSON 通过 Pydantic 校验，并把最近对话历史传给模型。未配置、认证失败、限流或超时时返回明确错误，不用固定文本冒充模型回答。校园事实始终来自数据库工具，不让模型补写地点、电话、档口、菜单或制度。
 
 ## 目录
 
@@ -85,7 +85,7 @@ docker compose up --build
 
 ## 环境变量
 
-必需生产变量：`DATABASE_URL`、`JWT_SECRET`、`REFRESH_TOKEN_SECRET`、`FRONTEND_URL`、`BACKEND_URL`、`ALLOWED_ORIGINS`、`COOKIE_SECURE`、`ADMIN_BOOTSTRAP_EMAIL`、`ADMIN_BOOTSTRAP_PASSWORD`。可选模型变量：`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`。
+必需生产变量：`DATABASE_URL`、`JWT_SECRET`、`REFRESH_TOKEN_SECRET`、`FRONTEND_URL`、`BACKEND_URL`、`ALLOWED_ORIGINS`、`COOKIE_SECURE`、`ADMIN_BOOTSTRAP_EMAIL`、`ADMIN_BOOTSTRAP_PASSWORD`。启用聊天还必须配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_BASE_URL` 默认 `https://api.deepseek.com`，`DEEPSEEK_MODEL` 默认 `deepseek-v4-flash`。
 
 生产环境会拒绝弱 JWT Secret 和不安全 Cookie。DeepSeek Key 只在后端读取，不进入浏览器、数据库、日志或 Git。完整说明见 [安全文档](docs/SECURITY.md)。
 
@@ -113,7 +113,7 @@ npm run build
 npm run test:e2e
 ```
 
-当前本地结果：后端 41 项通过、前端 17 项通过、Playwright 端到端 1 条完整流程通过，ESLint、TypeScript 与 Vite 生产构建通过。端到端测试使用无 Key 基础模式，不调用付费模型。详见 [功能冒烟记录](docs/FUNCTIONAL_SMOKE_TEST.md)。
+当前本地结果：后端 48 项通过、前端 19 项通过、Playwright 端到端 1 条完整流程通过，ESLint、TypeScript 与 Vite 生产构建通过。端到端测试由真实 FastAPI 请求本地 OpenAI 协议 Mock 服务，不调用付费模型；真实 DeepSeek 人工冒烟必须由项目所有者先在本机填写新 Key。详见 [功能冒烟记录](docs/FUNCTIONAL_SMOKE_TEST.md)。
 
 ## 部署
 

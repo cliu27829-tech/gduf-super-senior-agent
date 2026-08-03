@@ -8,6 +8,7 @@ FastAPI 自动文档位于后端 `/docs`，OpenAPI 位于 `/openapi.json`。除�
 |---|---|---|
 | GET | `/health` | 进程健康 |
 | GET | `/ready` | 数据库就绪 |
+| GET | `/api/agent/status` | 后端、模型配置、模型名和数据库状态；不返回 Key |
 
 ## 认证
 
@@ -15,7 +16,7 @@ FastAPI 自动文档位于后端 `/docs`，OpenAPI 位于 `/openapi.json`。除�
 
 ## Agent 与对话
 
-`POST /api/agent/chat` 返回 `intent`、`answer`、`tool_results`、`sources`、`degraded`、`requires_confirmation` 和中国时间。`GET /api/agent/conversations`、`GET/DELETE /api/agent/conversations/{id}` 均按用户隔离。
+`POST /api/agent/chat` 使用当前登录用户和最近对话历史调用后端模型客户端，成功返回 `intent`、`answer`、`tool_results`、`sources`、`degraded=false`、`requires_confirmation` 和中国时间。`GET /api/agent/conversations`、`GET/DELETE /api/agent/conversations/{id}` 均按用户隔离。
 
 ## 通知与任务
 
@@ -36,4 +37,4 @@ FastAPI 自动文档位于后端 `/docs`，OpenAPI 位于 `/openapi.json`。除�
 
 ## 错误与限制
 
-Pydantic 校验失败为 422，未登录 401，权限不足 403，实体不存在 404，重复资源 409，超大文件 413，不支持类型 415。未处理异常返回通用 500 与 `request_id`，不会把栈或私密内容回传。
+Pydantic 校验失败为 422，未登录 401，模型限流 429，模型未配置 503，模型超时 504，模型认证或提供方失败 502。权限不足为 403，实体不存在 404，重复资源 409，超大文件 413，不支持类型 415。错误只返回公开中文说明和错误编号，不返回 Key、栈或提供方私密信息。
