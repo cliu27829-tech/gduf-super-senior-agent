@@ -13,7 +13,9 @@ class TaskBase(BaseModel):
     course: str = Field(default="", max_length=120)
     task_type: str = Field(default="general", max_length=80)
     materials: list[str] = Field(default_factory=list, max_length=50)
+    submission_target: str = Field(default="", max_length=255)
     submission_method: str = Field(default="", max_length=255)
+    file_naming: str = Field(default="", max_length=255)
     source_text: str = Field(default="", max_length=20000)
     source_url: str = Field(default="", max_length=1000)
     needs_confirmation: bool = False
@@ -32,7 +34,11 @@ class TaskUpdate(BaseModel):
     course: str | None = Field(default=None, max_length=120)
     task_type: str | None = Field(default=None, max_length=80)
     materials: list[str] | None = None
+    submission_target: str | None = Field(default=None, max_length=255)
     submission_method: str | None = Field(default=None, max_length=255)
+    file_naming: str | None = Field(default=None, max_length=255)
+    source_text: str | None = Field(default=None, max_length=20000)
+    source_url: str | None = Field(default=None, max_length=1000)
     status: str | None = Field(default=None, pattern=r"^(pending|completed)$")
 
 
@@ -48,7 +54,9 @@ class TaskRead(BaseModel):
     course: str
     task_type: str
     materials: list[str]
+    submission_target: str
     submission_method: str
+    file_naming: str
     source_text: str
     source_url: str
     status: str
@@ -61,4 +69,3 @@ class TaskRead(BaseModel):
 class BulkTaskAction(BaseModel):
     task_ids: list[str] = Field(min_length=1, max_length=100)
     action: str = Field(pattern=r"^(complete|reopen|delete)$")
-

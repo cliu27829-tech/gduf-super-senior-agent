@@ -21,12 +21,12 @@
         "source_status": "historical"
       }
     ],
-    "verification_method": "official_historical",
-    "verified_at": null,
-    "freshness_status": "needs_verification",
-    "confidence": 0.75,
+    "verification_method": "official_page",
+    "verified_at": "2026-08-04T00:00:00+08:00",
+    "freshness_status": "current",
+    "confidence": 0.95,
     "is_active": true,
-    "data_status": "historical_seed"
+    "data_status": "official"
   },
   {
     "id": "gz-north-canteen",
@@ -50,11 +50,11 @@
       }
     ],
     "verification_method": "official_historical",
-    "verified_at": null,
-    "freshness_status": "expired",
+    "verified_at": "2017-07-11T00:00:00+08:00",
+    "freshness_status": "stale",
     "confidence": 0.45,
     "is_active": true,
-    "data_status": "historical_seed"
+    "data_status": "historical"
   },
   {
     "id": "gz-south-canteen",
@@ -78,11 +78,11 @@
       }
     ],
     "verification_method": "official_historical",
-    "verified_at": null,
-    "freshness_status": "expired",
+    "verified_at": "2017-07-11T00:00:00+08:00",
+    "freshness_status": "stale",
     "confidence": 0.45,
     "is_active": true,
-    "data_status": "historical_seed"
+    "data_status": "historical"
   },
   {
     "id": "gz-north-teaching-building",
@@ -110,6 +110,91 @@
     "freshness_status": "needs_verification",
     "confidence": 0.3,
     "is_active": true,
-    "data_status": "demo_fixture"
+    "data_status": "historical"
+  },
+  {
+    "id": "gz-express-service-station",
+    "name": "校本部快递服务站（历史位置）",
+    "aliases": ["快递站", "取快递", "快递服务站"],
+    "campus": "广州校本部",
+    "category": "express_station",
+    "area": "迎福路南侧公交站旁（2017 年历史记录，现状待核验）",
+    "map_x": 0.26,
+    "map_y": 0.74,
+    "description": "学校后勤 2017 年整治记录提到快递服务站设置在迎福路南侧、公交站旁。该位置属于历史资料，当前运营方与点位必须现场核验。",
+    "services": ["快递取件", "快递寄件（以现场为准）"],
+    "source_references": [
+      {
+        "title": "专项工作（四）：迎福路道路存在严重安全隐患",
+        "url": "https://hq.gduf.edu.cn/info/1102/1708.htm",
+        "publisher": "广东金融学院后勤服务中心",
+        "published_at": "2017-07-04",
+        "source_level": 2,
+        "is_official": true,
+        "source_status": "historical"
+      }
+    ],
+    "verification_method": "official_historical",
+    "verified_at": "2017-07-04T00:00:00+08:00",
+    "freshness_status": "stale",
+    "confidence": 0.45,
+    "is_active": true,
+    "data_status": "historical"
+  },
+  {
+    "id": "gz-campus-clinic",
+    "name": "广州校本部卫生所",
+    "aliases": ["医务室", "医务所", "校医室", "卫生所"],
+    "campus": "广州校本部",
+    "category": "medical",
+    "area": "广州校本部内（具体楼栋未见公开来源）",
+    "description": "学校后勤 2023 年工作总结确认校本部卫生所持续提供诊疗和医疗保障，但公开页面没有给出具体楼栋。",
+    "services": ["基础诊疗", "医疗保障", "健康档案"],
+    "opening_hours": "公开总结提到 2023 年采用 24 小时轮值；当前安排请以学校通知为准",
+    "source_references": [
+      {
+        "title": "2023年基建后勤管理处工作总结",
+        "url": "https://jjc.gduf.edu.cn/info/1082/1477.htm",
+        "publisher": "广东金融学院基建后勤管理处",
+        "published_at": "2024-01-01",
+        "source_level": 2,
+        "is_official": true,
+        "source_status": "historical"
+      }
+    ],
+    "verification_method": "official_historical",
+    "verified_at": "2024-01-01T00:00:00+08:00",
+    "freshness_status": "stale",
+    "confidence": 0.55,
+    "is_active": true,
+    "data_status": "historical"
+  },
+  {
+    "id": "gz-campus-card-service",
+    "name": "校园卡部",
+    "aliases": ["校园卡服务", "补办校园卡", "卡部"],
+    "campus": "广州校本部",
+    "category": "campus_service",
+    "area": "教育技术与网络管理中心校园卡部（具体服务窗口位置请电话确认）",
+    "description": "教育技术与网络管理中心官网列出校园卡办理、挂失补卡等服务与校园卡部电话；公开页面没有给出具体窗口楼栋。",
+    "phone": "020-37216660",
+    "services": ["校园卡办理", "挂失", "解挂", "补卡", "密码与余额查询"],
+    "source_references": [
+      {
+        "title": "教育技术与网络管理中心服务指南",
+        "url": "https://etnc.gduf.edu.cn/",
+        "publisher": "广东金融学院教育技术与网络管理中心",
+        "published_at": null,
+        "source_level": 1,
+        "is_official": true,
+        "source_status": "current_source"
+      }
+    ],
+    "verification_method": "official_page",
+    "verified_at": "2026-08-04T00:00:00+08:00",
+    "freshness_status": "current",
+    "confidence": 0.9,
+    "is_active": true,
+    "data_status": "official"
   }
 ]

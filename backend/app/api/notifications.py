@@ -65,8 +65,11 @@ def confirm_notification(payload: NotificationConfirmRequest, user: CurrentUser,
             title=draft.title,
             deadline=draft.deadline,
             location=draft.location,
+            description=draft.notes,
             materials=draft.materials,
+            submission_target=draft.submission_target,
             submission_method=draft.submission_method,
+            file_naming=draft.file_naming,
             source_text=draft.source_text,
             source_url=draft.source_url,
             needs_confirmation=draft.needs_confirmation,
@@ -79,4 +82,3 @@ def confirm_notification(payload: NotificationConfirmRequest, user: CurrentUser,
     for task in tasks:
         db.refresh(task)
     return tasks
-

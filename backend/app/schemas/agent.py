@@ -9,6 +9,7 @@ class AgentChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=10000)
     conversation_id: str | None = None
     campus_id: str | None = None
+    campus: str | None = Field(default=None, max_length=64)
 
 
 class ToolResult(BaseModel):
@@ -27,6 +28,8 @@ class AgentChatResponse(BaseModel):
     sources: list[dict] = Field(default_factory=list)
     requires_confirmation: bool = False
     degraded: bool = False
+    error_id: str | None = None
+    data_status: str = "not_applicable"
     current_time: datetime
 
 
@@ -35,7 +38,10 @@ class NotificationDraft(BaseModel):
     deadline: datetime | None
     location: str = ""
     materials: list[str] = Field(default_factory=list)
+    submission_target: str = ""
     submission_method: str = ""
+    file_naming: str = ""
+    notes: str = ""
     source_text: str = ""
     source_url: str = ""
     needs_confirmation: bool = False
@@ -52,4 +58,3 @@ class NotificationParseResponse(BaseModel):
 class NotificationConfirmRequest(BaseModel):
     drafts: list[NotificationDraft] = Field(min_length=1, max_length=50)
     confirmed: bool
-

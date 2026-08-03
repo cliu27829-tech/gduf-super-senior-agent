@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from calendar import monthrange
 import re
 from zoneinfo import ZoneInfo
 
@@ -79,6 +80,17 @@ def infer_missing_year(month: int, day: int, hour: int, minute: int, reference_t
     )
 
 
+def _day_count(value: str) -> int | None:
+    if value.isdigit():
+        return int(value)
+    values = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+    if value in values:
+        return values[value]
+    if value.startswith("十") and len(value) == 2:
+        return 10 + values.get(value[1], 0)
+    return None
+
+
 def parse_relative_datetime(text: str, reference_time: datetime | None = None) -> DateInference:
     reference = now_china(reference_time)
     normalized = re.sub(r"\s+", "", text or "")
@@ -97,6 +109,23 @@ def parse_relative_datetime(text: str, reference_time: datetime | None = None) -
     month_day = re.search(r"(?P<month>\d{1,2})月(?P<day>\d{1,2})日?", normalized)
     if month_day:
         return infer_missing_year(int(month_day.group("month")), int(month_day.group("day")), hour, minute, reference)
+    within = re.search(r"(?P<count>\d+|[一二两三四五六七八九十]+)天内", normalized)
+    if within:
+        count = _day_count(within.group("count"))
+        if count is not None:
+            value = datetime.combine(reference.date() + timedelta(days=count), time(hour, minute), CHINA_TZ)
+            return DateInference(value, False, True, 0.65, f"“{within.group(0)}”是时间范围，暂按最晚 {value.strftime('%Y-%m-%d %H:%M')} 预览；保存前请确认。")
+    after_days = re.search(r"(?P<count>\d+|[一二两三四五六七八九十]+)天后", normalized)
+    if after_days:
+        count = _day_count(after_days.group("count"))
+        if count is not None:
+            value = datetime.combine(reference.date() + timedelta(days=count), time(hour, minute), CHINA_TZ)
+            return DateInference(value, False, False, 0.9, "相对天数按中国标准时间解释。")
+    if "月底" in normalized:
+        last_day = monthrange(reference.year, reference.month)[1]
+        value = datetime(reference.year, reference.month, last_day, hour, minute, tzinfo=CHINA_TZ)
+        passed = value < reference
+        return DateInference(value, False, True, 0.7, "“月底”暂按本月最后一天解释，具体时刻请在保存前确认。" + ("该时刻已过去。" if passed else ""))
     offsets = {"大后天": 3, "后天": 2, "明天": 1, "明日": 1, "今天": 0, "今日": 0}
     for word, offset in offsets.items():
         if word in normalized:
@@ -108,6 +137,21 @@ def parse_relative_datetime(text: str, reference_time: datetime | None = None) -
         weekday_map = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
         target = reference.date() + timedelta(days=7 - reference.weekday() + weekday_map[weekday.group(1)])
         return DateInference(datetime.combine(target, time(hour, minute), CHINA_TZ), False, False, 0.9, "‘下周’按中国标准时间所在周解释。")
+    this_weekday = re.search(r"本周([一二三四五六日天])", normalized)
+    if this_weekday:
+        weekday_map = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
+        target = reference.date() - timedelta(days=reference.weekday()) + timedelta(days=weekday_map[this_weekday.group(1)])
+        value = datetime.combine(target, time(hour, minute), CHINA_TZ)
+        passed = value < reference
+        return DateInference(value, False, passed, 0.65 if passed else 0.9, "‘本周’按中国标准时间所在周解释。" + ("该时刻已过去，请确认。" if passed else ""))
+    bare_weekday = re.search(r"(?<![下本])周([一二三四五六日天])", normalized)
+    if bare_weekday:
+        weekday_map = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
+        days_ahead = (weekday_map[bare_weekday.group(1)] - reference.weekday()) % 7
+        value = datetime.combine(reference.date() + timedelta(days=days_ahead), time(hour, minute), CHINA_TZ)
+        if value < reference:
+            value += timedelta(days=7)
+        return DateInference(value, False, True, 0.75, "未写‘本周/下周’，按下一次该星期预览；保存前请确认。")
     return DateInference(None, False, True, 0.0, "没有识别到可验证的日期，请补充截止时间。")
 
 
@@ -115,4 +159,3 @@ def freshness_status(verified_at: datetime | None, threshold_days: int = 180) ->
     if not verified_at:
         return "needs_verification"
     return "stale" if now_china() - now_china(verified_at) > timedelta(days=threshold_days) else "current"
-

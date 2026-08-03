@@ -1,0 +1,25 @@
+[
+  {
+    "id": "gz-campus-card-replacement",
+    "title": "校园卡丢失挂失与补卡",
+    "category": "校园卡补办",
+    "steps": [
+      {"order": 1, "text": "先通过学校官方校园卡渠道挂失；无法在线处理时联系校园卡部确认。"},
+      {"order": 2, "text": "携本人有效身份证件前往校园卡部办理补卡。"},
+      {"order": 3, "text": "服务窗口具体位置、办理时间和费用以当天官方通知或校园卡部答复为准。"}
+    ],
+    "materials": ["本人有效身份证件"],
+    "contact": "校园卡部：020-37216660",
+    "verification_status": "needs_verification",
+    "verified_at": "2026-08-04T00:00:00+08:00",
+    "is_active": true,
+    "source": {
+      "title": "校园卡丢卡挂失补卡流程",
+      "url": "https://etnc.gduf.edu.cn/fwzn/xyk/xykdkgsbklc.htm",
+      "publisher": "广东金融学院教育技术与网络管理中心",
+      "source_type": "official",
+      "is_official": true,
+      "confidence": 0.8
+    }
+  }
+]
