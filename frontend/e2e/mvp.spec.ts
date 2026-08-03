@@ -34,13 +34,16 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   await page.reload();
   await expect(page.getByRole("heading", { name: /端到端同学，今天先做哪一件/ })).toBeVisible();
   await page.getByRole("link", { name: "问师兄" }).first().click();
+  await expect(page.getByRole("heading", { name: "问问大师兄" })).toBeVisible();
+  await expect(page.locator(".message.assistant")).toHaveCount(1);
 
   const send = async (message: string) => {
-    const assistantCount = await page.locator(".message.assistant").count();
+    const completedAnswers = page.locator(".message.assistant").filter({ hasNot: page.locator(".typing") });
+    const assistantCount = await completedAnswers.count();
     await page.getByLabel("消息").fill(message);
     await page.getByRole("button", { name: "发送" }).click();
-    await expect(page.locator(".message.assistant")).toHaveCount(assistantCount + 1);
-    return page.locator(".message.assistant").last();
+    await expect(completedAnswers).toHaveCount(assistantCount + 1);
+    return completedAnswers.last();
   };
 
   const greeting = await send("你好，你能做什么？");
