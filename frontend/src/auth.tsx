@@ -29,6 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUser().finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const unauthorized = () => setUser(null);
+    window.addEventListener("gduf:unauthorized", unauthorized);
+    return () => window.removeEventListener("gduf:unauthorized", unauthorized);
+  }, []);
+
   const value = useMemo<AuthContextValue>(() => ({
     user,
     loading,
@@ -55,4 +61,3 @@ export function useAuth() {
   if (!context) throw new Error("useAuth must be used inside AuthProvider");
   return context;
 }
-

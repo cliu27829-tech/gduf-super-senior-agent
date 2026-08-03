@@ -12,7 +12,7 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  useEffect(() => { api<Campus[]>("/campuses").then((rows) => { setCampuses(rows); setForm((value) => ({ ...value, campus_id: value.campus_id || rows[0]?.id || "" })); }).catch(() => undefined); }, []);
+  useEffect(() => { api<Campus[]>("/campuses").then((rows) => { setCampuses(rows); setForm((value) => ({ ...value, campus_id: value.campus_id || rows[0]?.id || "" })); }).catch((reason) => setError(reason instanceof Error ? reason.message : "校区数据加载失败")); }, []);
   if (user) return <Navigate to="/dashboard" replace />;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -49,4 +49,3 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
     </section>
   );
 }
-

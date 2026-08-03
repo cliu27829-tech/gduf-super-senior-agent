@@ -206,12 +206,22 @@ label small { font-weight: 400; }
 .stall-list p { margin: 6px 0; font-size: .85rem; }
 .canteen-card footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; font-size: .78rem; }
 .canteen-card footer a { color: var(--navy-light); text-decoration: underline; }
+.food-result-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 14px; }
+.food-result-list article { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.food-result-list article > span, .food-result-list article > small { display: block; color: var(--muted); margin-top: 4px; }
+.food-result-list article p { color: var(--text); }
 
 .chat-page { min-height: calc(100vh - 206px); display: grid; grid-template-columns: 260px 1fr; gap: 18px; padding-block: 30px; }
 .conversation-sidebar { background: #e8ecef; border-radius: 14px; padding: 18px; max-height: calc(100vh - 140px); overflow: auto; }
 .conversation-sidebar > button:not(.icon-button) { display: block; width: 100%; border: 0; background: transparent; text-align: left; padding: 12px; border-radius: 8px; cursor: pointer; }
 .conversation-sidebar > button.active, .conversation-sidebar > button:hover { background: white; }
 .conversation-sidebar small { display: block; margin-top: 4px; }
+.conversation-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border-radius: 8px; margin-top: 3px; }
+.conversation-row:hover, .conversation-row.active { background: white; }
+.conversation-row > button:first-child { min-width: 0; border: 0; background: transparent; text-align: left; padding: 12px; cursor: pointer; }
+.conversation-row > button:first-child strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-row .danger-link { border: 0; background: transparent; padding: 8px; cursor: pointer; }
+.intent-label { display: inline-block; color: var(--muted); font-size: .75rem; margin-top: 6px; }
 .chat-main { background: white; border: 1px solid var(--border); border-radius: 14px; display: grid; grid-template-rows: auto minmax(300px, 1fr) auto auto; min-height: 720px; overflow: hidden; }
 .chat-main > header { padding: 24px 30px; border-bottom: 1px solid var(--border); }
 .chat-main > header h1 { font-size: 2rem; margin-bottom: 5px; }
@@ -230,6 +240,7 @@ label small { font-weight: 400; }
 .tool-card > div:first-child { padding: 10px 12px; background: #edf1f3; display: flex; justify-content: space-between; font-size: .8rem; }
 .tool-items > div { padding: 10px 12px; border-top: 1px solid var(--border); }
 .tool-items small { display: block; margin-top: 3px; }
+.tool-items p { margin: 6px 0 0; font-size: .82rem; }
 .chat-sources { margin-top: 12px; display: grid; gap: 6px; }
 .chat-sources a { border-left: 3px solid var(--gold); background: white; padding: 8px 10px; font-size: .78rem; }
 .chat-sources small { display: block; }
@@ -245,7 +256,12 @@ label small { font-weight: 400; }
 .upload-box input { border: 0; padding: 5px 0 0; }
 .draft-section { margin-top: 44px; }
 .draft-card { background: white; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; padding: 22px; }
-.draft-card header { display: flex; justify-content: space-between; margin-bottom: 18px; }
+.draft-card header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
+.draft-card details, .task-table-row details { margin-top: 12px; color: var(--muted); }
+.draft-card summary, .task-table-row summary { cursor: pointer; font-size: .8rem; }
+.source-excerpt { white-space: pre-wrap; overflow-wrap: anywhere; background: #f4f6f7; padding: 10px; border-radius: 6px; color: var(--text); font-size: .82rem; }
+.confirmation-check { display: flex; align-items: flex-start; gap: 10px; background: #fff5dc; border: 1px solid #e8ce8d; border-radius: 8px; padding: 14px; margin: 18px 0; }
+.confirmation-check input { width: auto; margin-top: 3px; }
 .date-warning, .date-note { padding: 10px 12px; margin: 16px 0 0; }
 .date-warning { background: #fae5d9; color: #793b1f; }
 .date-note { background: #e8f1ed; color: #285a46; }
@@ -266,6 +282,7 @@ label small { font-weight: 400; }
 .task-status.completed { color: var(--success); }
 .row-actions { display: flex; gap: 8px; }
 .row-actions button { border: 0; background: transparent; cursor: pointer; font-size: .78rem; }
+.row-actions button:disabled { opacity: .45; cursor: wait; }
 .task-form-drawer { display: grid; gap: 15px; }
 
 .profile-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; }

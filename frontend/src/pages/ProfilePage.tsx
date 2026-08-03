@@ -13,10 +13,10 @@ export default function ProfilePage() {
   const [passwords, setPasswords] = useState({ current_password: "", new_password: "" });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  useEffect(() => { api<Campus[]>("/campuses").then(setCampuses); }, []);
+  useEffect(() => { api<Campus[]>("/campuses").then(setCampuses).catch((reason) => setError(reason instanceof Error ? reason.message : "校区数据加载失败")); }, []);
   const saveProfile = async (event: FormEvent) => { event.preventDefault(); setError(""); try { await api("/auth/me", { method: "PATCH", body: JSON.stringify(profile) }); await refreshUser(); setMessage("个人资料已更新"); } catch (reason) { setError(reason instanceof Error ? reason.message : "更新失败"); } };
   const changePassword = async (event: FormEvent) => { event.preventDefault(); setError(""); try { await api("/auth/change-password", { method: "POST", body: JSON.stringify(passwords) }); setMessage("密码已修改，请重新登录"); setTimeout(() => navigate("/login"), 800); } catch (reason) { setError(reason instanceof Error ? reason.message : "修改失败"); } };
-  const deleteAccount = async () => { if (!window.confirm("确定永久删除账户及其任务、对话数据吗？此操作不可撤销。")) return; await api("/auth/account", { method: "DELETE" }); navigate("/"); };
+  const deleteAccount = async () => { if (!window.confirm("确定永久删除账户及其任务、对话数据吗？此操作不可撤销。")) return; setError(""); try { await api("/auth/account", { method: "DELETE" }); await refreshUser(); navigate("/"); } catch (reason) { setError(reason instanceof Error ? reason.message : "删除账户失败"); } };
   return (
     <section className="page section-wrap profile-page">
       <div className="page-heading"><div><p className="eyebrow">个人中心</p><h1>管理账号和所属校区</h1><p>账户创建于 {formatDate(user?.created_at)}</p></div><div className="profile-avatar">{(user?.nickname || user?.username || "广").slice(0, 1)}</div></div>
@@ -25,4 +25,3 @@ export default function ProfilePage() {
     </section>
   );
 }
-

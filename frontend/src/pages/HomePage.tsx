@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import type { Campus } from "../types";
 
 const entrances = [
+  { icon: "问", title: "AI 对话", detail: "识别意图并调用校园地点、饭堂、流程与任务工具", href: "/chat" },
   { icon: "⌖", title: "查校园", detail: "按校区搜索地点、饭堂和已核验来源", href: "/map" },
   { icon: "文", title: "处理通知", detail: "把通知拆成可修改、可确认的任务", href: "/notifications" },
   { icon: "✓", title: "我的任务", detail: "查看截止时间并导出双重提醒日历", href: "/tasks" },
@@ -13,7 +14,8 @@ const entrances = [
 export default function HomePage() {
   const { user } = useAuth();
   const [campuses, setCampuses] = useState<Campus[]>([]);
-  useEffect(() => { api<Campus[]>("/campuses").then(setCampuses).catch(() => setCampuses([])); }, []);
+  const [error, setError] = useState("");
+  useEffect(() => { api<Campus[]>("/campuses").then(setCampuses).catch((reason) => setError(reason instanceof Error ? reason.message : "校区数据加载失败")); }, []);
   return (
     <>
       <section className="hero section-wrap">
@@ -27,14 +29,15 @@ export default function HomePage() {
           </div>
         </div>
         <div className="trust-board" aria-label="数据可信度说明">
-          <span className="board-number">03</span>
-          <strong>个校区，分开查询</strong>
+          <span className="board-number">{String(campuses.length).padStart(2, "0")}</span>
+          <strong>个已加载校区，分开查询</strong>
           <div className="rule" />
           <p>官方来源</p><small>优先展示学校与校区官网</small>
           <p>人工核验</p><small>管理员填写证据后才能标记已核验</small>
           <p>诚实降级</p><small>没有实时菜单时明确说没有</small>
         </div>
       </section>
+      {error && <div className="section-wrap error-banner" role="alert">{error}</div>}
       <section className="section-wrap section-block">
         <div className="section-heading"><p className="eyebrow">常用入口</p><h2>少绕一步，快把事情做完</h2></div>
         <div className="entrance-grid">
@@ -45,9 +48,10 @@ export default function HomePage() {
         <div className="section-wrap campus-band-inner">
           <div><p className="eyebrow light">三个校区</p><h2>只看你所在校区的信息</h2><p>跨校区问题会显式区分，避免把广州、肇庆和清远的数据混在一起。</p></div>
           <div className="campus-list">
-            {(campuses.length ? campuses : [{ id: "gz", name: "广州校本部" }, { id: "zq", name: "肇庆校区" }, { id: "qy", name: "清远校区" }]).map((campus, index) => (
+            {campuses.map((campus, index) => (
               <div className="campus-row" key={campus.id}><span>0{index + 1}</span><strong>{campus.name}</strong><small>数据状态逐条标记</small></div>
             ))}
+            {!campuses.length && !error && <small>正在加载校区数据…</small>}
           </div>
         </div>
       </section>
@@ -55,4 +59,3 @@ export default function HomePage() {
     </>
   );
 }
-
