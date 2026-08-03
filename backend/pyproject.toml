@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/models/entities.py"]
+
