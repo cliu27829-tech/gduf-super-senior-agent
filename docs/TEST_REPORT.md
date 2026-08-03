@@ -1,13 +1,15 @@
 # 测试报告
 
-执行日期：2026-08-03；Python 3.12.3、Node 24.13、npm 11.6.2。
+执行日期：2026-08-04；Python 3.12.3、Node 24.13、npm 11.6.2。
 
 ## 结果
 
 | 套件 | 结果 |
 |---|---|
-| 后端 Pytest | 32 passed，约 6–7 秒 |
-| 前端 Vitest | 13 passed / 2 files，约 2–3 秒 |
+| 后端 Pytest | 41 passed，约 3–7 秒 |
+| 前端 Vitest | 17 passed / 2 files，约 3–4 秒 |
+| Playwright E2E | 1 passed，本机 Edge 完整业务闭环约 7 秒 |
+| ESLint | `eslint . --max-warnings 0` 通过 |
 | TypeScript | `tsc -b --pretty false` 通过 |
 | 前端生产构建 | Vite 8.2.0，39 modules，JS gzip 89.38 kB，CSS gzip 6.42 kB |
 | Python 编译 | `python -m compileall -q app` 通过 |
@@ -27,7 +29,7 @@
 
 ## 端到端业务流
 
-后端 TestClient 完整跑通：注册 → 创建任务 → 登出 → 未授权 → 再登录 → 原任务存在；普通用户后台 403；管理员创建已核验地点必须附证据 → 普通地点 API 可见 → 审计日志存在；通知草稿确认、任务保存和 ICS 解析分别验证。真实 LLM 未被调用。
+Playwright 使用本机 Edge 和真实 5173/8000 服务完整跑通：注册 → 刷新登录 → 普通对话 → 学习建议 → 饭堂工具与来源 → 通知多字段预览 → 人工确认 → 保存任务 → 编辑 → 下载并检查 ICS → 退出 → 重新登录 → 原任务存在 → 删除任务 → 删除测试账号。后端 TestClient 另行覆盖用户隔离、管理员权限与证据规则。真实 LLM 未被调用，模型正常路径使用 Mock。
 
 ## 响应式验收
 
@@ -35,4 +37,4 @@ CSS 在 900px 与 640px 设置布局断点，表格/管理后台有横向容器�
 
 ## 未自动化项
 
-没有真实部署平台和线上 PostgreSQL，因此线上网络、第三方 Cookie、冷启动和平台备份只能在部署后按 `ONLINE_SMOKE_TEST.md` 验证。Docker CLI 当前机器不可用，Compose 仅完成静态配置和 CI `docker compose config` 校验，不能声称本机容器已启动。
+没有真实部署平台和线上 PostgreSQL，因此线上网络、第三方 Cookie、冷启动和平台备份只能在部署后按 `ONLINE_SMOKE_TEST.md` 验证。Docker CLI 当前机器不可用；CI 已增加 Compose 实际构建、启动与健康探测，结果以 PR Check 为准，不能声称本机容器已启动。逐项冒烟证据见 `FUNCTIONAL_SMOKE_TEST.md`。
