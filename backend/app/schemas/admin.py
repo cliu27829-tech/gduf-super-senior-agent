@@ -80,6 +80,7 @@ class CanteenWrite(BaseModel):
     opening_hours: str = Field(default="", max_length=255)
     payment_methods: list[str] = Field(default_factory=list)
     verification_status: str = Field(default="needs_verification", max_length=40)
+    data_status: str = Field(default="needs_verification", max_length=40)
     verified_at: datetime | None = None
     confidence: float = Field(default=0.0, ge=0, le=1)
     is_active: bool = True
@@ -100,6 +101,7 @@ class StallWrite(BaseModel):
     payment_methods: list[str] = Field(default_factory=list)
     is_operating: bool | None = None
     verification_status: str = Field(default="needs_verification", max_length=40)
+    data_status: str = Field(default="needs_verification", max_length=40)
     verified_at: datetime | None = None
     confidence: float = Field(default=0.0, ge=0, le=1)
     is_active: bool = True

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import CurrentUser, DbSession
-from app.models.entities import Conversation, Message
+from app.models.entities import Campus, Conversation, Message
 from app.schemas.agent import AgentChatRequest, AgentChatResponse
 from app.services.agent_service import AgentService
 
@@ -15,7 +15,20 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 
 @router.post("/chat", response_model=AgentChatResponse)
 def chat(payload: AgentChatRequest, user: CurrentUser, db: DbSession) -> AgentChatResponse:
-    return AgentService(db).chat(user, payload.message, payload.conversation_id, payload.campus_id)
+    campus_id = payload.campus_id
+    if payload.campus:
+        campus = db.scalar(
+            select(Campus).where(
+                Campus.is_active.is_(True),
+                (Campus.slug == payload.campus) | (Campus.name == payload.campus),
+            )
+        )
+        if not campus:
+            raise HTTPException(status_code=422, detail="校区不存在")
+        campus_id = campus.id
+    elif campus_id and not db.scalar(select(Campus.id).where(Campus.id == campus_id, Campus.is_active.is_(True))):
+        raise HTTPException(status_code=422, detail="校区不存在")
+    return AgentService(db).chat(user, payload.message, payload.conversation_id, campus_id)
 
 
 @router.get("/conversations")
@@ -55,4 +68,3 @@ def delete_conversation(conversation_id: str, user: CurrentUser, db: DbSession) 
     db.delete(row)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-

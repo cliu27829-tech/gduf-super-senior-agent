@@ -26,15 +26,21 @@ def list_locations(
     category: str | None = None,
     q: str = "",
 ) -> list[Location]:
-    query = select(Location).options(selectinload(Location.sources)).where(Location.is_active.is_(True))
+    query = select(Location).options(selectinload(Location.sources)).where(
+        Location.is_active.is_(True), Location.data_status != "demo_fixture"
+    )
     if campus_id:
         query = query.where(Location.campus_id == campus_id)
     if category:
         query = query.where(Location.category == category)
+    rows = list(db.scalars(query.order_by(Location.name)).unique())
     if q.strip():
-        needle = f"%{q.strip()}%"
-        query = query.where(or_(Location.name.ilike(needle), Location.description.ilike(needle), Location.address.ilike(needle)))
-    return list(db.scalars(query.order_by(Location.name)).unique())
+        needle = q.strip().lower()
+        rows = [
+            item for item in rows
+            if needle in " ".join([item.name, *item.aliases, item.description, item.address, item.area, *item.services]).lower()
+        ]
+    return rows
 
 
 def _distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -56,7 +62,11 @@ def nearby_locations(
     category: str | None = None,
     limit: int = Query(default=8, ge=1, le=50),
 ) -> list[dict]:
-    query = select(Location).where(Location.campus_id == campus_id, Location.is_active.is_(True))
+    query = select(Location).where(
+        Location.campus_id == campus_id,
+        Location.is_active.is_(True),
+        Location.data_status != "demo_fixture",
+    )
     if category:
         query = query.where(Location.category == category)
     ranked: list[dict] = []
@@ -75,7 +85,9 @@ def nearby_locations(
 
 @router.get("/locations/{location_id}", response_model=LocationRead)
 def get_location(location_id: str, db: DbSession) -> Location:
-    item = db.scalar(select(Location).options(selectinload(Location.sources)).where(Location.id == location_id, Location.is_active.is_(True)))
+    item = db.scalar(select(Location).options(selectinload(Location.sources)).where(
+        Location.id == location_id, Location.is_active.is_(True), Location.data_status != "demo_fixture"
+    ))
     if not item:
         raise HTTPException(status_code=404, detail="地点不存在")
     return item
@@ -94,26 +106,42 @@ def submit_feedback(payload: FeedbackCreate, user: CurrentUser, db: DbSession) -
 
 
 @router.get("/canteens", response_model=list[CanteenRead])
-def list_canteens(db: DbSession, campus_id: str | None = None, q: str = "") -> list[Canteen]:
-    query = select(Canteen).options(selectinload(Canteen.stalls), selectinload(Canteen.source)).where(Canteen.is_active.is_(True))
+def list_canteens(db: DbSession, campus_id: str | None = None, q: str = "") -> list[CanteenRead]:
+    query = select(Canteen).options(selectinload(Canteen.stalls), selectinload(Canteen.source)).where(
+        Canteen.is_active.is_(True), Canteen.data_status != "demo_fixture"
+    )
     if campus_id:
         query = query.where(Canteen.campus_id == campus_id)
     if q.strip():
         query = query.where(Canteen.name.ilike(f"%{q.strip()}%"))
-    return list(db.scalars(query.order_by(Canteen.name)).unique())
+    rows = list(db.scalars(query.order_by(Canteen.name)).unique())
+    return [
+        CanteenRead.model_validate(row).model_copy(
+            update={"stalls": [StallRead.model_validate(stall) for stall in row.stalls if stall.is_active and stall.data_status != "demo_fixture"]}
+        )
+        for row in rows
+    ]
 
 
 @router.get("/canteens/{canteen_id}", response_model=CanteenRead)
-def get_canteen(canteen_id: str, db: DbSession) -> Canteen:
-    item = db.scalar(select(Canteen).options(selectinload(Canteen.stalls), selectinload(Canteen.source)).where(Canteen.id == canteen_id, Canteen.is_active.is_(True)))
+def get_canteen(canteen_id: str, db: DbSession) -> CanteenRead:
+    item = db.scalar(select(Canteen).options(selectinload(Canteen.stalls), selectinload(Canteen.source)).where(
+        Canteen.id == canteen_id, Canteen.is_active.is_(True), Canteen.data_status != "demo_fixture"
+    ))
     if not item:
         raise HTTPException(status_code=404, detail="饭堂不存在")
-    return item
+    return CanteenRead.model_validate(item).model_copy(
+        update={"stalls": [StallRead.model_validate(stall) for stall in item.stalls if stall.is_active and stall.data_status != "demo_fixture"]}
+    )
 
 
 @router.get("/canteens/{canteen_id}/stalls", response_model=list[StallRead])
 def list_stalls(canteen_id: str, db: DbSession) -> list[FoodStall]:
-    return list(db.scalars(select(FoodStall).where(FoodStall.canteen_id == canteen_id, FoodStall.is_active.is_(True)).order_by(FoodStall.floor, FoodStall.name)))
+    return list(db.scalars(select(FoodStall).where(
+        FoodStall.canteen_id == canteen_id,
+        FoodStall.is_active.is_(True),
+        FoodStall.data_status != "demo_fixture",
+    ).order_by(FoodStall.floor, FoodStall.name)))
 
 
 @router.get("/food-search")
@@ -124,14 +152,19 @@ def food_search(db: DbSession, q: str = Query(min_length=1, max_length=100), cam
         .join(Canteen)
         .where(
             FoodStall.is_active.is_(True),
-            FoodStall.verified_at.is_not(None),
-            FoodStall.verification_status == "verified",
-            or_(FoodStall.name.ilike(f"%{q}%"), FoodStall.food_type.ilike(f"%{q}%")),
+            FoodStall.data_status != "demo_fixture",
+            Canteen.is_active.is_(True),
+            Canteen.data_status != "demo_fixture",
         )
     )
     if campus_id:
         query = query.where(Canteen.campus_id == campus_id)
-    rows = list(db.scalars(query))
+    candidates = list(db.scalars(query))
+    needle = q.strip().lower()
+    rows = [
+        item for item in candidates
+        if needle in " ".join([item.name, item.food_type, *item.common_items, *item.meal_periods]).lower()
+    ]
     return {
         "items": [
             {
@@ -141,11 +174,12 @@ def food_search(db: DbSession, q: str = Query(min_length=1, max_length=100), cam
                 "food_type": item.food_type,
                 "common_items": item.common_items,
                 "verified_at": item.verified_at,
+                "data_status": item.data_status,
             }
             for item in rows
         ],
         "today_menu_available": False,
-        "message": "没有可靠的今日菜单；结果仅包含已核验的常见餐品。" if rows else "没有匹配的已核验餐品，系统不会根据占位数据补写。",
+        "message": "目前没有可靠的当日菜单数据，以下是最近一次核验的档口或常见餐品信息，不保证今日全部供应。" if rows else "目前没有可靠的当日菜单数据，也没有匹配的可公开档口或常见餐品记录；系统不会编造今日供应。",
     }
 
 
@@ -165,4 +199,3 @@ def get_process(process_id: str, db: DbSession) -> CampusProcess:
     if not item:
         raise HTTPException(status_code=404, detail="办事流程不存在")
     return item
-

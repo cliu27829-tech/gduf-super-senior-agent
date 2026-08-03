@@ -139,6 +139,7 @@ class StallRead(BaseModel):
     payment_methods: list[str]
     is_operating: bool | None
     verification_status: str
+    data_status: str
     verified_at: datetime | None
     confidence: float
     is_active: bool
@@ -155,6 +156,7 @@ class CanteenRead(BaseModel):
     opening_hours: str
     payment_methods: list[str]
     verification_status: str
+    data_status: str
     verified_at: datetime | None
     confidence: float
     is_active: bool

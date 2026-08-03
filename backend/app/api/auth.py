@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import logging
 
 import jwt
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -29,6 +30,7 @@ from app.schemas.auth import (
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger("gduf-api.auth")
 
 
 def _set_cookies(response: Response, access: str, refresh: str) -> None:
@@ -130,8 +132,8 @@ def logout(request: Request, response: Response, db: DbSession) -> Response:
             if stored and not stored.revoked_at:
                 stored.revoked_at = datetime.now(UTC)
                 db.commit()
-        except jwt.PyJWTError:
-            pass
+        except jwt.PyJWTError as exc:
+            logger.info("logout_with_invalid_refresh error_type=%s", type(exc).__name__)
     _clear_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
@@ -174,4 +176,3 @@ def delete_account(response: Response, user: CurrentUser, db: DbSession) -> Resp
     _clear_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
-

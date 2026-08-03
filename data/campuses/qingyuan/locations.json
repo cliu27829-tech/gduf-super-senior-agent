@@ -26,7 +26,7 @@
     "freshness_status": "needs_verification",
     "confidence": 0.75,
     "is_active": true,
-    "data_status": "unverified_seed"
+    "data_status": "needs_verification"
   },
   {
     "id": "qy-canteen-placeholder",

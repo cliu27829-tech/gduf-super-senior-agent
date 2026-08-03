@@ -30,8 +30,12 @@ def generate_ics(tasks: list[Task], reminder_minutes: list[int] | None = None) -
         description = []
         if task.materials:
             description.append("材料：" + "、".join(task.materials))
+        if task.submission_target:
+            description.append("提交对象：" + task.submission_target)
         if task.submission_method:
             description.append("提交方式：" + task.submission_method)
+        if task.file_naming:
+            description.append("文件命名：" + task.file_naming)
         if task.source_url:
             description.append("来源：" + task.source_url)
         if task.source_text:
@@ -50,7 +54,11 @@ def generate_ics(tasks: list[Task], reminder_minutes: list[int] | None = None) -
         calendar.add_component(event)
     payload = calendar.to_ical()
     parsed = Calendar.from_ical(payload)
-    if not list(parsed.walk("VEVENT")):
+    events = list(parsed.walk("VEVENT"))
+    if not events:
         raise ValueError("没有包含截止时间的任务可导出")
+    if any(len(list(event.walk("VALARM"))) != len(reminders) for event in events):
+        raise ValueError("ICS 提醒校验失败")
+    if b"Asia/Shanghai" not in payload:
+        raise ValueError("ICS 时区校验失败")
     return payload
-
