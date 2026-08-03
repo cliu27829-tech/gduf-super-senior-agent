@@ -1,62 +1,47 @@
 # 系统架构
 
-## 设计目标
-
-系统以“本地结构化工具先于大模型”为核心。地点、饭堂、档口、来源、任务状态和时间解析由可测试服务决定；模型只能帮助分类或提取，不能绕过来源与核验状态编造校园事实。
+## 请求路径
 
 ```mermaid
 flowchart TD
-    UI["Streamlit 首页 / 三校共享 UI / 地图 / 后台 / 任务中心"]
-    ORCH["Orchestrator 意图评分与工具计划"]
-    LOC["LocationService"]
-    DATA["CampusDataService"]
-    NOTE["NotificationService"]
-    TASK["TaskService"]
-    KB["带时效元数据的词法知识检索"]
-    DB[("SQLite")]
-    SEED["data/campuses JSON"]
-    SOURCES["校方/校区/职能部门公开页"]
-    LLM["DeepSeek（可选，会话级 Key）"]
-
-    UI --> ORCH
-    UI --> LOC
-    UI --> DATA
-    UI --> TASK
-    ORCH --> LOC
-    ORCH --> NOTE
-    ORCH --> TASK
-    ORCH --> KB
-    NOTE -. "可选结构化提取" .-> LLM
-    LOC --> DB
-    LOC --> SEED
-    DATA --> DB
-    DATA --> SOURCES
-    TASK --> DB
+    B["手机/平板/桌面浏览器"] --> F["React + TypeScript"]
+    F -->|"同源 /api，HttpOnly Cookie"| A["FastAPI"]
+    A --> AU["认证与 RBAC"]
+    A --> AG["Agent 编排"]
+    A --> T["通知与任务服务"]
+    A --> C["地点/饭堂/流程服务"]
+    A --> AD["管理与审计服务"]
+    AU --> DB[("PostgreSQL")]
+    AG --> DB
+    T --> DB
+    C --> DB
+    AD --> DB
+    AG -->|"仅服务端；可选"| L["DeepSeek 兼容 API"]
 ```
 
-## 分层
+Nginx 承载静态前端并把 `/api/` 代理到 FastAPI，因此 Docker 默认是同源 Cookie。页面不直连数据库；Agent 也不能绕过服务层修改数据。
 
-### 核心层
+## 模块边界
 
-- `core/time_service.py`：`Asia/Shanghai` 时间、相对日期、缺失年份风险与新鲜度。所有入口都可注入 `reference_time` 做确定性测试。
-- `core/models.py`：地点、饭堂档口、来源、新鲜度和任务的类型模型。
-- `core/database.py`：SQLite schema、事务、外键与查询帮助器。
-- `core/orchestrator.py`：结合语言模式、实体、当前校区和可选分类器的混合路由。
+- `frontend/src/pages`：路由页面，只通过 `api.ts` 请求后端。
+- `backend/app/api`：HTTP、校验、状态码、身份依赖。
+- `backend/app/services`：Agent、通知、时间、ICS、种子数据等业务规则。
+- `backend/app/models`：SQLAlchemy 实体与关系。
+- `backend/app/schemas`：Pydantic 输入输出边界。
+- `backend/migrations`：唯一正式表结构演进路径。
 
-### 服务层
+## 认证
 
-- `LocationService`：强制校区过滤、别名搜索、饭堂/档口、附近距离、导航、纠错、导入、逻辑停用、核验和版本回滚。
-- `CampusDataService`：官方来源配置、缓存、重试、超时、差异检测和失败隔离。抓取内容不会直接改写已核验地点。
-- `NotificationService`：规则提取为默认降级，有显式 Key 时才调用模型。输出永远是无副作用草稿。
-- `TaskService`：按 `user_id` 隔离持久化任务，只接受显式确认创建，支持本周、过期、完成与重开。
+登录后由后端设置短期 Access Cookie 和限定在 `/api/auth` 的 Refresh Cookie。Refresh Token 数据库只保存 SHA-256 哈希，并在刷新时轮换。前端不使用 `localStorage` 保存认证凭据。普通用户和管理员权限在前后端都判断，但安全边界始终是后端 RBAC。
 
-### 展示层
+## Agent
 
-三个校区脚本只调用 `ui/campus_page.py` 的共享渲染函数。地图筛选和营业时间判断放在 `ui/map_helpers.py` 的纯函数中，可在没有 Streamlit 运行时直接测试。
+正常路径：用户/校区上下文 → `Asia/Shanghai` 当前时间 → LLM 结构化意图 → Pydantic 验证 → 数据库工具 → 结果校验 → 保存对话 → 结构化响应。LLM 不可用时采用显式 `degraded=true` 的规则分类。涉及校园事实时只访问数据库，无法确认就返回无数据。
 
-## 降级策略
+## 数据可信度
 
-- 无 API Key：地图、结构化查询、规则通知提取、任务、ICS 和后台正常运行。
-- 无地图 Key：对已核验 GPS 使用 Streamlit 底图；其他地点使用 0–1 示意坐标，并显式标记精度。
-- 官方源刷新失败：保留上次内容和哈希，单源错误不终止批次。
-- 无当日菜单：返回“没有可靠当日数据”和最近核验档口，不生成菜单。
+地点、饭堂、档口和流程保留来源、核验状态、核验时间、可信度、启用状态等字段。管理员标记 `verified` 时必须提供证据，后台写入 `verification_records` 与 `admin_audit_logs`。旧数据不会因年份变化自动升级为最新。
+
+## 部署拓扑
+
+本地/单机：Nginx + FastAPI + PostgreSQL 三容器。托管平台：Vercel 可部署前端，Render/Railway 部署 FastAPI，Neon/Supabase 提供 PostgreSQL；跨域时必须正确配置 HTTPS Cookie 和 CORS。生产 Secrets 不进入镜像或仓库。
