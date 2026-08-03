@@ -15,6 +15,7 @@ htmlcov/
 *.db-wal
 *.ics
 *.csv
+!data/import_templates/*.csv
 .DS_Store
 .streamlit/secrets.toml
 data/*.pdf
@@ -24,6 +25,15 @@ data/exports/
 data/uploads/
 mobile/node_modules/
 unimate/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
 
 # 好人师兄文件夹：只推送 .md 和 .txt 文件，排除大文件
 好人师兄/*.mhtml

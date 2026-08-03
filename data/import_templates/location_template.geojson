@@ -1,0 +1,24 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "campus_id": "REPLACE_WITH_CAMPUS_UUID",
+        "name": "示例地点",
+        "category": "service",
+        "description": "请删除示例要素后填写真实数据",
+        "verification_status": "needs_verification",
+        "verification_method": "admin_import",
+        "confidence": 0,
+        "freshness_status": "needs_verification",
+        "data_status": "admin_import",
+        "is_active": true
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [113.0, 23.0]
+      }
+    }
+  ]
+}

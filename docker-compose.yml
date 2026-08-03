@@ -1,0 +1,62 @@
+name: gduf-super-senior
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gduf}
+      POSTGRES_USER: ${POSTGRES_USER:-gduf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-database-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gduf} -d ${POSTGRES_DB:-gduf}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gduf}:${POSTGRES_PASSWORD:-change-this-database-password}@db:5432/${POSTGRES_DB:-gduf}
+      JWT_SECRET: ${JWT_SECRET:-development-jwt-secret-change-before-production}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-development-refresh-secret-change-before-production}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:8000}
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:-admin@example.com}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      AUTO_CREATE_SCHEMA: "false"
+      SEED_DEMO_DATA: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
