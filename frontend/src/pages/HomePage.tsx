@@ -55,7 +55,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-      <section className="section-wrap honesty-note"><strong>关于“实时”</strong><p>当前没有可靠的实时饭堂菜单，也没有经过测绘的校内路线算法。系统只展示已记录信息与外部地图导航，并把待核验内容清楚标出来。</p></section>
+      <section className="section-wrap honesty-note"><strong>关于“实时”</strong><p>当前没有可靠的实时饭堂菜单。高德凭据和核验 GPS 点位齐全时可查询真实步行路线；否则保留文字地点查询并明确说明缺失条件。</p></section>
     </>
   );
 }
