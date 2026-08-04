@@ -2,19 +2,24 @@
 
 ## 意图路由
 
-`Orchestrator` 同时使用语言模式分数、地点/饭堂/时间实体、当前校区上下文和可选外部分类器。每次结果包含意图、校区、置信度、理由和可显示的工具计划。
+当前编排顺序为 `observe → classify → plan → execute → verify → confirm → remember → respond`。分类器优先使用模型结构化 JSON，并在模型输出不可解析时使用确定性回退；计划、执行与校验均由后端代码控制。
 
 | 意图 | 典型问法 | 工具计划 |
 |---|---|---|
-| `campus_location_search` | “图书馆在哪里” | `search_locations` → `calculate_freshness` |
+| `campus_location_search` | “图书馆在哪里” | `search_campus_locations` → `get_location_details` |
 | `canteen_search` | “广州校本部有哪些饭堂” | `list_canteens` → `get_canteen_details` |
 | `food_search` | “我想吃面” | 只查已核验档口 |
 | `nearby_location_search` | “附近有快递站吗” | `find_nearby_locations` |
-| `campus_navigation` | “去图书馆怎么走” | 查地点 → 生成导航链接 |
-| `campus_data_freshness` | “数据最后什么时候核验” | 列出条目新鲜度 |
+| `campus_navigation` | “去图书馆怎么走” | `search_campus_locations` → `calculate_walking_route` |
 | `notification_to_tasks` | 带截止日期/材料/提交方式的通知 | 提取 → 预览，不创建 |
 | `campus_process` | 校园卡、报修、请假等 | 只返回有可验证来源的流程 |
 | `task_management` | “这周有什么没完成” | 按当前用户查本周任务 |
+| `learning_guidance` | “高数跟不上怎么办” | 通用建议，不虚构校园事实 |
+| `calendar_export` | “导出本周任务日历” | 查询任务 → 生成/验证 ICS |
+| `data_feedback` | “这个地点错了” | 返回纠错入口，不静默修改主数据 |
+| `out_of_scope` | 超出产品能力 | 明确边界，不伪造结果 |
+
+完整意图还包括 `general_chat`、`campus_life_guidance`、`document_analysis`；注册表中的 41 个工具覆盖地点/路线、饭堂、任务、通知、日历、流程、知识和用户偏好。工具统一返回成功状态、数据、摘要、来源、验证信息、错误和是否需要用户操作；执行记录写入 `tool_executions`。
 
 ## 工具执行原则
 

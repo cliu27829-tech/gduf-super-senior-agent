@@ -7,8 +7,9 @@
 - 认证：`users`、`refresh_tokens`。
 - 校园：`campuses`、`campus_maps`、`locations`、`canteens`、`food_stalls`、`campus_processes`。
 - 来源：`sources`、`location_sources`、`verification_records`、`data_refresh_logs`。
-- 用户事项：`tasks`、`task_reminders`、`conversations`、`messages`、`feedback_submissions`。
-- 运维：`admin_audit_logs`、`system_logs`。
+- 用户事项：`tasks`、`task_reminders`、`conversations`、`messages`、`feedback_submissions`、`user_preferences`。
+- 知识与文档：`knowledge_documents`、`uploaded_documents`；上传记录只有元数据和 SHA-256，不保存原文件或全文。
+- 运维：`admin_audit_logs`、`system_logs`、`tool_executions`。
 
 ## 约束与隔离
 
@@ -27,4 +28,4 @@ alembic current
 alembic revision --autogenerate -m "describe change"
 ```
 
-首个迁移以当前 `Base.metadata` 建立全量结构。后续必须使用新的、可审查的 Alembic revision，不在生产启用 `AUTO_CREATE_SCHEMA`。
+首个迁移以当时的 `Base.metadata` 建立全量结构；`20260804_03_agent_platform` 增加完整 Agent 平台相关表和流程字段。后续必须使用新的、可审查的 Alembic revision，不在生产启用 `AUTO_CREATE_SCHEMA`。

@@ -10,10 +10,12 @@
 - 滥用：注册/登录采用进程内基础频率限制；失败登录统一提示。
 - 日志：错误只记录异常类型和 request ID；不记录密码、JWT、DeepSeek Key 或完整通知正文。
 - 管理：已核验必须有证据；写操作记录审计日志。
+- 地图：浏览器只接收可公开的高德 JS Key；`securityJsCode` 与 WebService Key 由后端读取，JS API 通过受限同源代理加载。
+- 文档：上传内容在内存解析，只保存文件元数据、SHA-256 与解析状态，不保存原文件或全文。
 
 ## Secret 扫描
 
-2026-08-03 检查当前工作区、所有跟踪文件和可遍历 Git 历史中的 `sk-`、GitHub Token、管理员明文密码、`.env`、`secrets.toml`，未发现真实凭据。没有执行公共历史重写。`.env`、数据库、上传与前端构建目录均被忽略，`.env.example` 只含占位符/本地示例。
+2026-08-04 检查当前工作区、所有跟踪文件和可遍历 Git 历史中的 `sk-`、GitHub Token、管理员明文密码、`.env`、`secrets.toml`，未发现真实凭据。没有执行公共历史重写。`.env`、数据库、上传与前端构建目录均被忽略，`.env.example` 只含占位符/本地示例。
 
 用户曾经暴露的 API Key 不应继续使用，应在提供方控制台吊销并重新创建。新 Key 只能写入服务器/部署平台的 `DEEPSEEK_API_KEY`。
 
@@ -30,4 +32,4 @@
 
 进程内频率限制不适合多副本，需要 Redis/网关限流；尚未实现 MFA、邮箱验证、密码重置邮件和 CSRF Token。当前 Cookie `SameSite`、仅接受 JSON/受限 multipart 与精确 CORS 可降低 CSRF 风险，但高风险公网上线前建议增加 Origin 校验/CSRF Token、集中限流、依赖漏洞扫描和安全告警。
 
-2026-08-03 的 `npm audit --omit=dev` 对 React Router 7.18.2 报告一个高危 RSC Mode Action/Server Action CSRF 公告。当前前端是 Vite 纯客户端 SPA，不使用 React Server Components、SSR、Action 或 Server Action，因此受影响代码路径未启用；回退 7.11.0 会重新引入更多已修复的 XSS/开放重定向公告。现阶段固定当前 7.18.2 并持续跟踪上游修复，若未来启用 RSC/SSR 必须先升级并重新审计。
+2026-08-04 的 `npm audit --omit=dev` 对 React Router 7.18.2 报告一个高危 RSC Mode Action/Server Action CSRF 公告（GHSA-qwww-vcr4-c8h2）。当前前端是 Vite + BrowserRouter 纯客户端 SPA，不使用 React Server Components、SSR、Action 或 Server Action，因此受影响代码路径未启用；回退 7.11.0 会重新引入更多已修复的 XSS/开放重定向公告。现阶段固定当前注册表最新的 7.18.2 并持续跟踪上游修复，若未来启用 RSC/SSR 必须先升级并重新审计。

@@ -16,24 +16,31 @@ FastAPI 自动文档位于后端 `/docs`，OpenAPI 位于 `/openapi.json`。除�
 
 ## Agent 与对话
 
-`POST /api/agent/chat` 使用当前登录用户和最近对话历史调用后端模型客户端，成功返回 `intent`、`answer`、`tool_results`、`sources`、`degraded=false`、`requires_confirmation` 和中国时间。`GET /api/agent/conversations`、`GET/DELETE /api/agent/conversations/{id}` 均按用户隔离。
+`POST /api/agent/chat` 使用当前登录用户和最近对话历史调用后端模型客户端，成功返回 `intent`、`answer`、`tool_results`、`sources`、`degraded=false`、`requires_confirmation` 和中国时间。`GET/POST /api/agent/conversations`、`GET/DELETE /api/agent/conversations/{id}` 均按用户隔离。
 
 ## 通知与任务
 
 - `POST /api/notifications/parse`：multipart 文本或 TXT/PDF，仅预览。
 - `POST /api/notifications/confirm`：明确 `confirmed=true` 后批量保存。
 - `/api/tasks`：列表/创建，支持 `view`、`status`、`course`、`task_type`。
-- `/api/tasks/{id}`：读取、更新、删除；`complete`、`reopen` 执行状态变更。
+- `/api/tasks/{id}`：读取；更新请求体必须 `confirmed=true`，删除、`complete`、`reopen` 必须带确认参数。
 - `POST /api/tasks/bulk`：批量完成、重开、删除。
 - `GET /api/tasks/export/ics`：唯一文件名，支持 `task_ids` 与 `reminder_hours`。
 
 ## 校园数据
 
-公开接口：`/api/campuses`、`/api/locations`、`/api/locations/nearby`、`/api/locations/{id}`、`/api/canteens`、`/api/canteens/{id}`、`/api/canteens/{id}/stalls`、`/api/food-search`、`/api/processes`、`/api/processes/{id}`。`POST /api/location-feedback` 需要登录。
+公开接口：`/api/campuses`、`/api/locations`、`/api/locations/search`、`/api/locations/nearby`、`/api/locations/{id}`、`/api/canteens`、`/api/canteens/{id}`、`/api/canteens/{id}/stalls`、`/api/food-search`、`/api/processes`、`/api/processes/{id}`、`/api/knowledge`。`POST /api/processes/{id}/create-tasks` 和 `POST /api/location-feedback` 需要登录及明确确认。
+
+## 地图
+
+- `GET /api/map/status`：只返回高德 JS/WebService 是否配置，不返回凭据。
+- `GET /api/map/geocode`：由后端调用高德地理编码。
+- `GET /api/map/walking-route`：由后端调用真实步行路线服务。
+- `/api/map/_AMapService/{path}`：受限的高德 JS 安全代理，只允许指定 API 路径；`securityJsCode` 不进入浏览器。
 
 ## 管理后台
 
-后台提供仪表盘、用户更新；校区、地点、地图、饭堂、档口、办事流程和来源的管理接口；纠错批准/拒绝；陈旧数据、日志；CSV/JSON/GeoJSON 导入和 JSON 导出。写操作均审计。删除校区、地点、饭堂、档口和流程是停用语义；地图/来源可删除。
+后台提供仪表盘、用户更新；校区、地点、地图、饭堂、档口、办事流程、知识资料和来源的管理接口；纠错批准/拒绝；陈旧数据、日志；CSV/JSON/GeoJSON 导入和 JSON 导出。写操作均审计。删除校区、地点、饭堂、档口和流程是停用语义；地图/来源/知识资料可删除。
 
 ## 错误与限制
 

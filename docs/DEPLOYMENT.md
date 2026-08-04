@@ -35,15 +35,18 @@ BACKEND_URL=https://<render-domain>
 ADMIN_BOOTSTRAP_EMAIL=...
 ADMIN_BOOTSTRAP_PASSWORD=...
 DEEPSEEK_API_KEY=...  # 可空；空时规则降级
+AMAP_WEBSERVICE_KEY=...  # 只放 Render
+AMAP_SECURITY_CODE=...   # 只放 Render
 ```
 
-4. Vercel 新建项目，Root Directory 设为 `frontend`，Build Command `npm run build`，Output `dist`，添加 `VITE_API_BASE_URL=https://<render-domain>` 后重新部署。
+4. Vercel 新建项目，Root Directory 设为 `frontend`，Build Command `npm run build`，Output `dist`，添加 `VITE_API_BASE_URL=https://<render-domain>`；启用地图时再添加允许公开的 `VITE_AMAP_JS_KEY`，然后重新部署。
 5. 跨站 Cookie 依赖浏览器第三方 Cookie 策略。生产更推荐在 Vercel 配置 `/api/:path*` 到 Render 的同源 rewrite，或改用自有同主域名；生成后端域名后再把确定 URL 写入项目设置，不提交占位 URL。
 6. 首次管理员登录后立即改密码，随后从平台删除 `ADMIN_BOOTSTRAP_PASSWORD` 并重新部署（已有账户不会被覆盖）。
 
 ## 发布前检查
 
 - `.env` 未提交，生产 Secrets 均来自平台；DeepSeek Key 未设置为 Vite 变量。
+- 高德 `securityJsCode` 与 WebService Key 只在后端平台，前端只能设置 JS API Key。
 - `ENVIRONMENT=production` 能启动，弱 Secret/非安全 Cookie 会故意失败。
 - `alembic current` 指向 head；`/ready` 返回 200。
 - CORS 只有准确前端域名，无 `*`。
@@ -52,4 +55,4 @@ DEEPSEEK_API_KEY=...  # 可空；空时规则降级
 
 ## 当前部署状态
 
-本机没有 `vercel`、`render`、`railway`、Docker CLI 的可用登录会话，也没有目标 PostgreSQL 凭据，因此不能诚实生成公网地址。下一步只需用户在选定平台完成交互式登录；不需要把 Token 发给协作者。
+用户已说明 Render 网页端已登录，但当前终端没有 Render CLI/API 会话、目标服务标识或生产 PostgreSQL 凭据，且本机没有 Docker CLI，因此本轮没有冒充已部署或生成虚假公网地址。部署时不需要把 Token 发给协作者，只需在 Render 控制台连接现有 GitHub 仓库并按上文填写平台 Secrets。
