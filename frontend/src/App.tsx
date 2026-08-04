@@ -10,6 +10,7 @@ import HomePage from "./pages/HomePage";
 import MapPage from "./pages/MapPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import ProfilePage from "./pages/ProfilePage";
+import ProcessesPage from "./pages/ProcessesPage";
 import TasksPage from "./pages/TasksPage";
 
 const protect = (element: React.ReactNode) => <ProtectedRoute>{element}</ProtectedRoute>;
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="canteens" element={protect(<CanteensPage />)} />
         <Route path="notifications" element={protect(<NotificationsPage />)} />
         <Route path="tasks" element={protect(<TasksPage />)} />
+        <Route path="processes" element={protect(<ProcessesPage />)} />
         <Route path="profile" element={protect(<ProfilePage />)} />
         <Route path="admin/*" element={protectAdmin(<AdminPage />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -35,4 +37,3 @@ export default function App() {
     </Routes>
   );
 }
-

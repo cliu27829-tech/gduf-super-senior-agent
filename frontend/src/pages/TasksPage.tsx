@@ -62,8 +62,8 @@ export default function TasksPage() {
     setBusy(true);
     setError("");
     try {
-      if (name === "delete") await api(`/tasks/${task.id}`, { method: "DELETE" });
-      else await api(`/tasks/${task.id}/${name}`, { method: "POST" });
+      if (name === "delete") await api(`/tasks/${task.id}?confirmed=true`, { method: "DELETE" });
+      else await api(`/tasks/${task.id}/${name}?confirmed=true`, { method: "POST" });
       setSelected((current) => current.filter((id) => id !== task.id));
       await load();
     } catch (reason) {
@@ -77,7 +77,7 @@ export default function TasksPage() {
     setBusy(true);
     setError("");
     try {
-      await api("/tasks/bulk", { method: "POST", body: JSON.stringify({ task_ids: selected, action: name }) });
+      await api("/tasks/bulk", { method: "POST", body: JSON.stringify({ task_ids: selected, action: name, confirmed: true }) });
       setSelected([]);
       await load();
     } catch (reason) {

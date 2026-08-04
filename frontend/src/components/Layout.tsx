@@ -8,6 +8,7 @@ const navItems = [
   ["/canteens", "饭堂"],
   ["/notifications", "处理通知"],
   ["/tasks", "任务中心"],
+  ["/processes", "办事流程"],
 ];
 
 function Navigation() {
@@ -49,9 +50,8 @@ export function Layout() {
       <main id="main"><Outlet /></main>
       <footer className="site-footer">
         <p>广金大师兄 · 校园信息以来源、核验状态和更新时间为准</p>
-        <p>目前不提供实时菜单、校内路线算法或网站关闭后的主动推送。</p>
+        <p>目前不提供可靠实时菜单或网站关闭后的主动推送；路线仅在高德凭据和核验坐标齐全时启用。</p>
       </footer>
     </div>
   );
 }
-

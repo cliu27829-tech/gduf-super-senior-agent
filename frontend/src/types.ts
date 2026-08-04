@@ -7,6 +7,9 @@ export type User = {
   campus_id: string | null;
   grade: string;
   major: string;
+  preferred_name: string;
+  address_style: "同学" | "师弟" | "师妹" | "兄弟" | "名字";
+  preferred_location_id: string | null;
   is_active: boolean;
   created_at: string;
 };
@@ -116,6 +119,27 @@ export type Task = {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type CampusProcess = {
+  id: string;
+  campus_id: string | null;
+  title: string;
+  category: string;
+  steps: { order?: number; text?: string; title?: string }[];
+  materials: string[];
+  contact: string;
+  audience: string;
+  location: string;
+  opening_hours: string;
+  online_url: string;
+  notes: string;
+  verification_status: string;
+  verified_at: string | null;
+  confidence: number;
+  data_status: string;
+  is_active: boolean;
+  source: Source | null;
 };
 
 export type NotificationDraft = {
