@@ -13,9 +13,10 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@amap/amap-jsapi-loader": "^1.0.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-router-dom": "^7.18.2"
+    "react-router-dom": "7.18.2"
   },
   "devDependencies": {
     "@emnapi/core": "2.0.0-alpha.3",

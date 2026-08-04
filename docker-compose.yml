@@ -35,6 +35,9 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      AMAP_WEBSERVICE_KEY: ${AMAP_WEBSERVICE_KEY:-}
+      AMAP_SECURITY_CODE: ${AMAP_SECURITY_CODE:-}
+      AMAP_API_BASE_URL: ${AMAP_API_BASE_URL:-https://restapi.amap.com}
       AUTO_CREATE_SCHEMA: "false"
       SEED_DEMO_DATA: "true"
     depends_on:
@@ -51,6 +54,8 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        VITE_AMAP_JS_KEY: ${VITE_AMAP_JS_KEY:-}
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:
