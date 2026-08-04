@@ -131,6 +131,11 @@ def test_agent_llm_planner_and_answer_use_mocked_model(client: TestClient, regis
     assert response.json()["degraded"] is False
     assert "Mock LLM" in response.json()["answer"]
     assert len(mock_llm.calls) == 2
+    system_prompt = mock_llm.calls[-1][0]["content"]
+    assert "本轮没有后端工具内容" in system_prompt
+    assert "课程指定教材" in system_prompt
+    assert "补考重修政策" in system_prompt
+    assert "不代表你本人位于该校区" in system_prompt
 
 
 def test_agent_model_timeout_returns_explicit_error(client: TestClient, register_user, mock_llm):

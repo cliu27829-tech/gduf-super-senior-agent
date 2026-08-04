@@ -2,9 +2,9 @@
 
 测试日期：2026-08-04（Asia/Shanghai）
 
-测试环境：`http://127.0.0.1:5173`、FastAPI `127.0.0.1:8000`、本地 SQLite、未配置 `DEEPSEEK_API_KEY`
+自动化测试环境：`http://127.0.0.1:5173`、FastAPI `127.0.0.1:8000`、本地 SQLite；自动化与 CI 不配置真实 `DEEPSEEK_API_KEY`。
 
-执行方式：本机 Edge + Playwright 真实浏览器、真实 HTTP API、真实开发数据库；模型自动化路径使用本地 OpenAI 协议 Mock 服务，浏览器仍经过真实 FastAPI 模型客户端。真实 DeepSeek Key 当前未配置。
+执行方式：本机 Edge + Playwright 真实浏览器、真实 HTTP API、真实开发数据库；模型自动化路径使用本地 OpenAI 协议 Mock 服务，浏览器仍经过真实 FastAPI 模型客户端。真实 Key 只用于后续独立人工冒烟，不进入自动化环境。
 
 测试数据：使用唯一 `e2e-*` 账号；流程结束删除任务和账号。首轮失败遗留账号也已通过账户 API 清理。
 
@@ -46,4 +46,4 @@
 
 本机没有 `docker` 命令，因此本地无法实际执行 `docker compose up --build`。仓库 CI 的 delivery job 已增加 Compose 构建、启动和 `/health` 探测；Docker 是否通过以本次 PR 的 GitHub Check 为准。此项在 Check 成功前不能描述为已本机验证。
 
-本机尚未提供新的 `DEEPSEEK_API_KEY`，因此四条真实 DeepSeek 人工对话不能标记为通过；需项目所有者在被 Git 忽略的 `backend/.env` 中填写新 Key 后执行。
+项目所有者随后在被 Git 忽略的 `backend/.env` 中配置了新 Key，并完成独立的真实供应商四轮浏览器冒烟：4/4 聊天请求返回 200、页面与 API 回答一致、数据库保存 8 条交替历史消息、多轮记忆通过、临时账号已删除。人工测试输入与 Key 均不写入仓库。
