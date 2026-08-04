@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from io import BytesIO
+from hashlib import sha256
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from pypdf import PdfReader
 
 from app.core.config import get_settings
 from app.core.dependencies import CurrentUser, DbSession
-from app.models.entities import Task, TaskReminder
+from app.models.entities import Task, TaskReminder, UploadedDocument
 from app.schemas.agent import NotificationConfirmRequest, NotificationParseResponse
 from app.schemas.tasks import TaskRead
 from app.services.notification_service import NotificationService
@@ -36,11 +37,11 @@ def _extract_upload(filename: str, content_type: str, payload: bytes) -> str:
 @router.post("/parse", response_model=NotificationParseResponse)
 async def parse_notification(
     user: CurrentUser,
+    db: DbSession,
     text: str = Form(default=""),
     source_url: str = Form(default=""),
     file: UploadFile | None = File(default=None),
 ) -> NotificationParseResponse:
-    del user
     combined = text.strip()
     if file:
         payload = await file.read(get_settings().max_upload_bytes + 1)
@@ -51,6 +52,16 @@ async def parse_notification(
     if not combined:
         raise HTTPException(status_code=422, detail="请粘贴通知或上传 TXT/PDF")
     drafts, mode, warning = NotificationService().extract(combined, source_url)
+    if file:
+        db.add(UploadedDocument(
+            user_id=user.id,
+            original_filename=(file.filename or "upload")[:255],
+            content_type=(file.content_type or "application/octet-stream")[:120],
+            size_bytes=len(payload),
+            content_hash=sha256(payload).hexdigest(),
+            extraction_status=mode,
+        ))
+        db.commit()
     return NotificationParseResponse(drafts=drafts, extraction_mode=mode, warning=warning)
 
 

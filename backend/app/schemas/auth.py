@@ -38,6 +38,9 @@ class UserRead(BaseModel):
     campus_id: str | None
     grade: str
     major: str
+    preferred_name: str = ""
+    address_style: str = "同学"
+    preferred_location_id: str | None = None
     is_active: bool
     created_at: datetime
 
@@ -53,6 +56,11 @@ class ProfileUpdate(BaseModel):
     campus_id: str | None = None
     grade: str | None = Field(default=None, max_length=32)
     major: str | None = Field(default=None, max_length=100)
+    preferred_name: str | None = Field(default=None, max_length=80)
+    address_style: str | None = Field(
+        default=None, pattern=r"^(同学|师弟|师妹|兄弟|名字)$"
+    )
+    preferred_location_id: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -65,4 +73,3 @@ class ChangePasswordRequest(BaseModel):
         if not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value):
             raise ValueError("新密码至少包含一个字母和一个数字")
         return value
-

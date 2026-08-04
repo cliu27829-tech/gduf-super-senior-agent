@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     llm_read_timeout_seconds: float = 60.0
     llm_max_retries: int = 2
     llm_history_messages: int = 20
+    amap_webservice_key: str = ""
+    amap_security_code: str = ""
+    amap_api_base_url: str = "https://restapi.amap.com"
+    amap_request_timeout_seconds: float = 12.0
     admin_bootstrap_email: str = ""
     admin_bootstrap_password: str = ""
     data_root: Path = PROJECT_ROOT / "data"

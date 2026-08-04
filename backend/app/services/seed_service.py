@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import hash_password
-from app.models.entities import Campus, CampusProcess, Canteen, FoodStall, Location, Source, User
+from app.models.entities import Campus, CampusProcess, Canteen, FoodStall, KnowledgeDocument, Location, Source, User
 
 
 CAMPUS_DEFINITIONS = (
@@ -51,6 +51,8 @@ def _source(db: Session, data: dict, confidence: float = 0.0) -> Source:
     source.publisher = str(data.get("publisher") or "")
     source.source_type = str(data.get("source_type") or data.get("source_status") or "unverified")
     source.published_at = _date(data.get("published_at"))
+    source.fetched_at = _date(data.get("fetched_at"))
+    source.verified_at = _date(data.get("verified_at"))
     source.confidence = float(data.get("confidence", confidence))
     source.is_official = bool(data.get("is_official", False))
     return source
@@ -192,9 +194,38 @@ def seed_database(db: Session) -> None:
             process.steps = item.get("steps", [])
             process.materials = item.get("materials", [])
             process.contact = item.get("contact", "")
+            process.audience = item.get("audience", "")
+            process.location = item.get("location", "")
+            process.opening_hours = item.get("opening_hours", "")
+            process.online_url = item.get("online_url", "")
+            process.notes = item.get("notes", "")
             process.verification_status = item.get("verification_status", "needs_verification")
             process.verified_at = _date(item.get("verified_at"))
+            process.confidence = float(item.get("confidence", 0))
+            process.data_status = item.get("data_status", "needs_verification")
             process.is_active = bool(item.get("is_active", True))
+
+    knowledge_root = Path(settings.data_root) / "knowledge"
+    for path in knowledge_root.glob("*.json") if knowledge_root.exists() else []:
+        for item in json.loads(path.read_text(encoding="utf-8")):
+            source = _source(db, item.get("source", {}), float(item.get("confidence", 0)))
+            document = db.get(KnowledgeDocument, item["id"])
+            if not document:
+                document = KnowledgeDocument(id=item["id"], title=item["title"], content=item["content"])
+                db.add(document)
+            campus_name = item.get("campus")
+            document.campus_id = campus_by_name[campus_name].id if campus_name else None
+            document.source_id = source.id
+            document.title = item["title"]
+            document.content = item["content"]
+            document.publisher = item.get("publisher", source.publisher)
+            document.url = item.get("url", source.url)
+            document.published_at = _date(item.get("published_at"))
+            document.fetched_at = _date(item.get("fetched_at"))
+            document.valid_until = _date(item.get("valid_until"))
+            document.is_official = bool(item.get("is_official", source.is_official))
+            document.data_status = item.get("data_status", "needs_verification")
+            document.is_active = bool(item.get("is_active", True))
 
     if settings.admin_bootstrap_email and settings.admin_bootstrap_password:
         email = settings.admin_bootstrap_email.strip().lower()

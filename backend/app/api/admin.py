@@ -20,6 +20,7 @@ from app.models.entities import (
     DataRefreshLog,
     FeedbackSubmission,
     FoodStall,
+    KnowledgeDocument,
     Location,
     Source,
     SystemLog,
@@ -41,7 +42,9 @@ from app.schemas.admin import (
     StallWrite,
 )
 from app.schemas.auth import UserRead
-from app.schemas.campus import CampusRead, CanteenRead, LocationCreate, LocationRead, LocationUpdate, ProcessRead, SourceRead, StallRead
+from app.schemas.campus import (
+    CampusRead, CanteenRead, KnowledgeRead, KnowledgeWrite, LocationCreate, LocationRead, LocationUpdate, ProcessRead, SourceRead, StallRead,
+)
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -310,6 +313,54 @@ def deactivate_process(process_id: str, admin: AdminUser, db: DbSession) -> Resp
         raise HTTPException(status_code=404, detail="办事流程不存在")
     item.is_active = False
     audit(db, admin.id, "process.deactivate", "process", item.id, item.title)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/knowledge", response_model=list[KnowledgeRead])
+def knowledge_documents(admin: AdminUser, db: DbSession) -> list[KnowledgeDocument]:
+    del admin
+    return list(db.scalars(
+        select(KnowledgeDocument).options(selectinload(KnowledgeDocument.source)).order_by(KnowledgeDocument.updated_at.desc())
+    ))
+
+
+@router.post("/knowledge", response_model=KnowledgeRead, status_code=status.HTTP_201_CREATED)
+def create_knowledge(payload: KnowledgeWrite, admin: AdminUser, db: DbSession) -> KnowledgeDocument:
+    data = payload.model_dump(exclude={"evidence", "verification_note"})
+    item = KnowledgeDocument(**data)
+    if item.data_status == "verified" and not payload.evidence.strip():
+        raise HTTPException(status_code=422, detail="标记为已核验时必须填写核验证据")
+    db.add(item)
+    db.flush()
+    verify_record(db, admin.id, "knowledge", item.id, item.data_status, payload.evidence, payload.verification_note)
+    audit(db, admin.id, "knowledge.create", "knowledge", item.id, item.title)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.patch("/knowledge/{document_id}", response_model=KnowledgeRead)
+def update_knowledge(document_id: str, payload: KnowledgeWrite, admin: AdminUser, db: DbSession) -> KnowledgeDocument:
+    item = db.get(KnowledgeDocument, document_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="知识资料不存在")
+    for key, value in payload.model_dump(exclude={"evidence", "verification_note"}).items():
+        setattr(item, key, value)
+    verify_record(db, admin.id, "knowledge", item.id, item.data_status, payload.evidence, payload.verification_note)
+    audit(db, admin.id, "knowledge.update", "knowledge", item.id, item.title)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.delete("/knowledge/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def deactivate_knowledge(document_id: str, admin: AdminUser, db: DbSession) -> Response:
+    item = db.get(KnowledgeDocument, document_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="知识资料不存在")
+    item.is_active = False
+    audit(db, admin.id, "knowledge.deactivate", "knowledge", item.id, item.title)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

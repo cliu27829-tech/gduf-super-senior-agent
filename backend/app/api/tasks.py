@@ -92,6 +92,8 @@ def create_task(payload: TaskCreate, user: CurrentUser, db: DbSession) -> Task:
 
 @router.post("/bulk", status_code=status.HTTP_204_NO_CONTENT)
 def bulk_action(payload: BulkTaskAction, user: CurrentUser, db: DbSession) -> Response:
+    if not payload.confirmed:
+        raise HTTPException(status_code=422, detail="批量操作前必须明确确认")
     tasks = list(db.scalars(select(Task).where(Task.user_id == user.id, Task.id.in_(payload.task_ids))))
     if len(tasks) != len(set(payload.task_ids)):
         raise HTTPException(status_code=404, detail="部分任务不存在")
@@ -115,8 +117,10 @@ def get_task(task_id: str, user: CurrentUser, db: DbSession) -> Task:
 
 @router.patch("/{task_id}", response_model=TaskRead)
 def update_task(task_id: str, payload: TaskUpdate, user: CurrentUser, db: DbSession) -> Task:
+    if not payload.confirmed:
+        raise HTTPException(status_code=422, detail="修改任务前必须明确确认")
     task = _owned(db, task_id, user.id)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    for key, value in payload.model_dump(exclude_unset=True, exclude={"confirmed"}).items():
         setattr(task, key, value)
     if task.status == "completed" and not task.completed_at:
         task.completed_at = utcnow()
@@ -128,14 +132,18 @@ def update_task(task_id: str, payload: TaskUpdate, user: CurrentUser, db: DbSess
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task(task_id: str, user: CurrentUser, db: DbSession) -> Response:
+def delete_task(task_id: str, user: CurrentUser, db: DbSession, confirmed: bool = Query(default=False)) -> Response:
+    if not confirmed:
+        raise HTTPException(status_code=422, detail="删除任务前必须明确确认")
     db.delete(_owned(db, task_id, user.id))
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{task_id}/complete", response_model=TaskRead)
-def complete_task(task_id: str, user: CurrentUser, db: DbSession) -> Task:
+def complete_task(task_id: str, user: CurrentUser, db: DbSession, confirmed: bool = Query(default=False)) -> Task:
+    if not confirmed:
+        raise HTTPException(status_code=422, detail="完成任务前必须明确确认")
     task = _owned(db, task_id, user.id)
     task.status = "completed"
     task.completed_at = utcnow()
@@ -145,11 +153,12 @@ def complete_task(task_id: str, user: CurrentUser, db: DbSession) -> Task:
 
 
 @router.post("/{task_id}/reopen", response_model=TaskRead)
-def reopen_task(task_id: str, user: CurrentUser, db: DbSession) -> Task:
+def reopen_task(task_id: str, user: CurrentUser, db: DbSession, confirmed: bool = Query(default=False)) -> Task:
+    if not confirmed:
+        raise HTTPException(status_code=422, detail="重开任务前必须明确确认")
     task = _owned(db, task_id, user.id)
     task.status = "pending"
     task.completed_at = None
     db.commit()
     db.refresh(task)
     return task
-

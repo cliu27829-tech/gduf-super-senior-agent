@@ -27,6 +27,7 @@ class TaskCreate(TaskBase):
 
 
 class TaskUpdate(BaseModel):
+    confirmed: bool = False
     title: str | None = Field(default=None, min_length=1, max_length=180)
     description: str | None = Field(default=None, max_length=5000)
     deadline: datetime | None = None
@@ -69,3 +70,4 @@ class TaskRead(BaseModel):
 class BulkTaskAction(BaseModel):
     task_ids: list[str] = Field(min_length=1, max_length=100)
     action: str = Field(pattern=r"^(complete|reopen|delete)$")
+    confirmed: bool = False

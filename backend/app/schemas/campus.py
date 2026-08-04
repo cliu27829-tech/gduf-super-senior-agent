@@ -183,7 +183,57 @@ class ProcessRead(BaseModel):
     steps: list[dict]
     materials: list[str]
     contact: str
+    audience: str
+    location: str
+    opening_hours: str
+    online_url: str
+    notes: str
     verification_status: str
     verified_at: datetime | None
+    confidence: float
+    data_status: str
     is_active: bool
     source: SourceRead | None = None
+
+
+class ProcessTaskCreate(BaseModel):
+    confirmed: bool
+    include_overview: bool = True
+
+
+class KnowledgeRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    campus_id: str | None
+    source_id: str | None
+    title: str
+    content: str
+    publisher: str
+    url: str
+    published_at: datetime | None
+    fetched_at: datetime | None
+    valid_until: datetime | None
+    is_official: bool
+    data_status: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    source: SourceRead | None = None
+
+
+class KnowledgeWrite(BaseModel):
+    campus_id: str | None = None
+    source_id: str | None = None
+    title: str = Field(min_length=1, max_length=255)
+    content: str = Field(min_length=1, max_length=200000)
+    publisher: str = Field(default="", max_length=255)
+    url: str = Field(default="", max_length=1000)
+    published_at: datetime | None = None
+    fetched_at: datetime | None = None
+    valid_until: datetime | None = None
+    is_official: bool = False
+    data_status: str = Field(default="needs_verification", max_length=40)
+    is_active: bool = True
+    evidence: str = ""
+    verification_note: str = ""

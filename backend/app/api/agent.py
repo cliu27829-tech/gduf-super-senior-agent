@@ -63,6 +63,15 @@ def conversations(user: CurrentUser, db: DbSession) -> list[dict]:
     return [{"id": row.id, "title": row.title, "campus_id": row.campus_id, "created_at": row.created_at, "updated_at": row.updated_at} for row in rows]
 
 
+@router.post("/conversations", status_code=status.HTTP_201_CREATED)
+def create_conversation(user: CurrentUser, db: DbSession) -> dict:
+    row = Conversation(user_id=user.id, campus_id=user.campus_id, title="新对话")
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "title": row.title, "campus_id": row.campus_id, "created_at": row.created_at, "updated_at": row.updated_at}
+
+
 @router.get("/conversations/{conversation_id}")
 def conversation_detail(conversation_id: str, user: CurrentUser, db: DbSession) -> dict:
     row = db.scalar(select(Conversation).options(selectinload(Conversation.messages)).where(Conversation.id == conversation_id, Conversation.user_id == user.id))

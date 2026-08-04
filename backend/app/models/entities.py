@@ -83,6 +83,37 @@ class User(Base, TimestampMixin):
     major: Mapped[str] = mapped_column(String(100), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     campus: Mapped[Campus | None] = relationship()
+    preference: Mapped[UserPreference | None] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
+
+    @property
+    def preferred_name(self) -> str:
+        return self.preference.preferred_name if self.preference else ""
+
+    @property
+    def address_style(self) -> str:
+        return self.preference.address_style if self.preference else "同学"
+
+    @property
+    def preferred_location_id(self) -> str | None:
+        return self.preference.preferred_location_id if self.preference else None
+
+
+class UserPreference(Base, TimestampMixin):
+    __tablename__ = "user_preferences"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    preferred_name: Mapped[str] = mapped_column(String(80), default="")
+    address_style: Mapped[str] = mapped_column(String(30), default="同学")
+    preferred_location_id: Mapped[str | None] = mapped_column(
+        ForeignKey("locations.id", ondelete="SET NULL"), nullable=True
+    )
+    accessibility_notes: Mapped[str] = mapped_column(String(500), default="")
+    user: Mapped[User] = relationship(back_populates="preference")
 
 
 class RefreshToken(Base):
@@ -202,10 +233,54 @@ class CampusProcess(Base, TimestampMixin):
     steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     materials: Mapped[list[str]] = mapped_column(JSON, default=list)
     contact: Mapped[str] = mapped_column(String(255), default="")
+    audience: Mapped[str] = mapped_column(String(255), default="")
+    location: Mapped[str] = mapped_column(String(500), default="")
+    opening_hours: Mapped[str] = mapped_column(String(255), default="")
+    online_url: Mapped[str] = mapped_column(String(1000), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
     verification_status: Mapped[str] = mapped_column(String(40), default="needs_verification")
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    data_status: Mapped[str] = mapped_column(String(40), default="needs_verification", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     source: Mapped[Source | None] = relationship()
+
+
+class KnowledgeDocument(Base, TimestampMixin):
+    __tablename__ = "knowledge_documents"
+    __table_args__ = (Index("ix_knowledge_campus_status", "campus_id", "data_status", "is_active"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campus_id: Mapped[str | None] = mapped_column(
+        ForeignKey("campuses.id", ondelete="SET NULL"), nullable=True
+    )
+    source_id: Mapped[str | None] = mapped_column(
+        ForeignKey("sources.id", ondelete="SET NULL"), nullable=True
+    )
+    title: Mapped[str] = mapped_column(String(255), index=True)
+    content: Mapped[str] = mapped_column(Text)
+    publisher: Mapped[str] = mapped_column(String(255), default="")
+    url: Mapped[str] = mapped_column(String(1000), default="")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_official: Mapped[bool] = mapped_column(Boolean, default=False)
+    data_status: Mapped[str] = mapped_column(String(40), default="needs_verification")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[Source | None] = relationship()
+
+
+class UploadedDocument(Base):
+    __tablename__ = "uploaded_documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(120), default="")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    extraction_status: Mapped[str] = mapped_column(String(30), default="parsed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 class Task(Base, TimestampMixin):
@@ -265,6 +340,25 @@ class Message(Base):
     sources: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+class ToolExecution(Base):
+    __tablename__ = "tool_executions"
+    __table_args__ = (Index("ix_tool_execution_conversation_created", "conversation_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    message_id: Mapped[str | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(100), index=True)
+    success: Mapped[bool] = mapped_column(Boolean, default=True)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    verification: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    error_code: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 class FeedbackSubmission(Base, TimestampMixin):

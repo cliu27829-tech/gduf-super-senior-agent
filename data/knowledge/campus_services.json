@@ -1,0 +1,26 @@
+[
+  {
+    "id": "gz-card-guide",
+    "campus": "广州校本部",
+    "title": "校园卡丢失挂失与补卡公开指引线索",
+    "content": "学校教育技术与网络管理中心公开页面说明，校园卡丢失后应先通过学校公开渠道挂失；补卡通常需要本人有效身份证件。具体服务窗口、办理时间和费用可能变化，办理前应查看最新官方通知或联系校园卡部确认。",
+    "publisher": "广东金融学院教育技术与网络管理中心",
+    "url": "https://etnc.gduf.edu.cn/fwzn/xyk/xykdkgsbklc.htm",
+    "published_at": null,
+    "fetched_at": "2026-08-04T00:00:00+08:00",
+    "valid_until": null,
+    "is_official": true,
+    "data_status": "needs_verification",
+    "is_active": true,
+    "confidence": 0.8,
+    "source": {
+      "title": "校园卡丢卡挂失补卡流程",
+      "url": "https://etnc.gduf.edu.cn/fwzn/xyk/xykdkgsbklc.htm",
+      "publisher": "广东金融学院教育技术与网络管理中心",
+      "source_type": "official",
+      "is_official": true,
+      "confidence": 0.8,
+      "fetched_at": "2026-08-04T00:00:00+08:00"
+    }
+  }
+]

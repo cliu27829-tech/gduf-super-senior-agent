@@ -391,80 +391,8 @@ class AgentService:
         return await self.llm.chat_completion(messages, temperature=0.6)
 
     async def chat(self, user: User, message: str, conversation_id: str | None, campus_id: str | None) -> AgentChatResponse:
-        plan = await self.classify(message)
-        conversation = None
-        if conversation_id:
-            conversation = self.db.scalar(select(Conversation).where(Conversation.id == conversation_id, Conversation.user_id == user.id))
-            if not conversation:
-                raise HTTPException(status_code=404, detail="对话不存在")
-        if not conversation:
-            conversation = Conversation(user_id=user.id, campus_id=campus_id or user.campus_id, title=message[:60])
-            self.db.add(conversation)
-            self.db.flush()
-        elif campus_id:
-            conversation.campus_id = campus_id
+        from app.agents.orchestrator import AgentOrchestrator
 
-        history = self._conversation_history(conversation.id)
-        self.db.add(Message(conversation_id=conversation.id, role="user", content=message, intent=plan.intent))
-        tool_results: list[ToolResult] = []
-        sources: list[dict] = []
-        requires_confirmation = False
-        data_status = "not_applicable"
-        effective_campus = campus_id or conversation.campus_id or user.campus_id
-        tool_summary = ""
-
-        if plan.intent == "campus_location_search":
-            tool_summary, tool_results, sources, data_status = self._locations(message, effective_campus)
-        elif plan.intent in {"canteen_search", "food_search"}:
-            tool_summary, tool_results, sources, data_status = self._canteens(message, effective_campus, plan.intent == "food_search")
-        elif plan.intent == "notification_to_tasks":
-            drafts, mode, warning = NotificationService().extract(message)
-            tool_results = [ToolResult(tool="notification_parser", title="通知任务预览", data=[draft.model_dump(mode="json") for draft in drafts])]
-            tool_summary = "已生成任务预览，必须由用户编辑并明确确认后才能写入数据库。" + (f" {warning}" if warning else "")
-            requires_confirmation = True
-            if mode == "rules":
-                tool_summary += " 通知结构由本地解析器提取，请用户重点核对日期和提交要求。"
-        elif plan.intent == "task_management":
-            tasks = list(self.db.scalars(select(Task).where(Task.user_id == user.id).order_by(Task.deadline.is_(None), Task.deadline)))
-            data = [{"id": task.id, "title": task.title, "deadline": task.deadline.isoformat() if task.deadline else None, "status": task.status} for task in tasks]
-            tool_results = [ToolResult(tool="task_list", title="我的任务", data=data)]
-            tool_summary = f"当前共有 {len(tasks)} 条任务，其中 {sum(task.status == 'pending' for task in tasks)} 条待完成。"
-        elif plan.intent == "campus_process":
-            tool_summary, tool_results, sources, data_status = self._processes(message, effective_campus)
-        elif plan.intent == "out_of_scope":
-            tool_summary = "请求超出校园助手范围；请礼貌说明能够处理校园查询、通知任务、学习与校园生活问题。"
-
-        campus_name = self.db.scalar(select(Campus.name).where(Campus.id == effective_campus)) or "未指定"
-        answer = await self._generate_answer(
-            message,
-            history,
-            campus_name,
-            tool_summary,
-            tool_results,
-            sources,
-        )
-
-        assistant_message = Message(
-            conversation_id=conversation.id,
-            role="assistant",
-            content=answer,
-            intent=plan.intent,
-            tool_results=[item.model_dump(mode="json") for item in tool_results],
-            sources=sources,
-        )
-        self.db.add(assistant_message)
-        self.db.commit()
-        self.db.refresh(assistant_message)
-        return AgentChatResponse(
-            conversation_id=conversation.id,
-            message_id=assistant_message.id,
-            intent=plan.intent,
-            answer=answer,
-            tool_results=tool_results,
-            sources=sources,
-            requires_confirmation=requires_confirmation,
-            degraded=False,
-            error_id=None,
-            data_status=data_status,
-            current_time=now_china(),
+        return await AgentOrchestrator(self.db, self.llm, self).run(
+            user, message, conversation_id, campus_id
         )

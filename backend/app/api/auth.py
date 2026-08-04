@@ -18,7 +18,7 @@ from app.core.security import (
     hash_token,
     verify_password,
 )
-from app.models.entities import Campus, RefreshToken, User
+from app.models.entities import Campus, Location, RefreshToken, User, UserPreference
 from app.schemas.auth import (
     AuthResponse,
     ChangePasswordRequest,
@@ -147,11 +147,33 @@ def me(user: CurrentUser) -> User:
 @router.patch("/me", response_model=UserRead)
 def update_me(payload: ProfileUpdate, user: CurrentUser, db: DbSession) -> User:
     changes = payload.model_dump(exclude_unset=True)
+    preference_changes = {
+        key: changes.pop(key)
+        for key in ("preferred_name", "address_style", "preferred_location_id")
+        if key in changes
+    }
     if "campus_id" in changes and changes["campus_id"]:
         if not db.scalar(select(Campus).where(Campus.id == changes["campus_id"], Campus.is_active.is_(True))):
             raise HTTPException(status_code=422, detail="所选校区不可用")
+    if preference_changes.get("preferred_location_id"):
+        location = db.scalar(
+            select(Location).where(
+                Location.id == preference_changes["preferred_location_id"],
+                Location.is_active.is_(True),
+                Location.data_status != "demo_fixture",
+            )
+        )
+        target_campus = changes.get("campus_id", user.campus_id)
+        if not location or location.campus_id != target_campus:
+            raise HTTPException(status_code=422, detail="常用地点必须属于当前校区且可公开查询")
     for key, value in changes.items():
         setattr(user, key, value.strip() if isinstance(value, str) else value)
+    if preference_changes:
+        preference = user.preference or UserPreference(user_id=user.id)
+        for key, value in preference_changes.items():
+            setattr(preference, key, value.strip() if isinstance(value, str) else value)
+        if not user.preference:
+            db.add(preference)
     db.commit()
     db.refresh(user)
     return user

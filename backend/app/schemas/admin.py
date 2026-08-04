@@ -118,8 +118,15 @@ class ProcessWrite(BaseModel):
     steps: list[dict] = Field(default_factory=list)
     materials: list[str] = Field(default_factory=list)
     contact: str = Field(default="", max_length=255)
+    audience: str = Field(default="", max_length=255)
+    location: str = Field(default="", max_length=500)
+    opening_hours: str = Field(default="", max_length=255)
+    online_url: str = Field(default="", max_length=1000)
+    notes: str = ""
     verification_status: str = Field(default="needs_verification", max_length=40)
     verified_at: datetime | None = None
+    confidence: float = Field(default=0.0, ge=0, le=1)
+    data_status: str = Field(default="needs_verification", max_length=40)
     is_active: bool = True
     evidence: str = ""
     verification_note: str = ""
