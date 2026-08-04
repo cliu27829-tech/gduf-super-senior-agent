@@ -28,11 +28,14 @@ def test_task_crud_complete_reopen(client: TestClient, register_user):
     assert created.json()["submission_target"] == "任课老师"
     assert created.json()["file_naming"] == "学号-姓名"
     assert client.get(f"/api/tasks/{task_id}").status_code == 200
-    updated = client.patch(f"/api/tasks/{task_id}", json={"title": "修改后的任务"})
+    assert client.patch(f"/api/tasks/{task_id}", json={"title": "未确认修改"}).status_code == 422
+    updated = client.patch(f"/api/tasks/{task_id}", json={"title": "修改后的任务", "confirmed": True})
     assert updated.json()["title"] == "修改后的任务"
-    assert client.post(f"/api/tasks/{task_id}/complete").json()["status"] == "completed"
-    assert client.post(f"/api/tasks/{task_id}/reopen").json()["status"] == "pending"
-    assert client.delete(f"/api/tasks/{task_id}").status_code == 204
+    assert client.post(f"/api/tasks/{task_id}/complete").status_code == 422
+    assert client.post(f"/api/tasks/{task_id}/complete?confirmed=true").json()["status"] == "completed"
+    assert client.post(f"/api/tasks/{task_id}/reopen?confirmed=true").json()["status"] == "pending"
+    assert client.delete(f"/api/tasks/{task_id}").status_code == 422
+    assert client.delete(f"/api/tasks/{task_id}?confirmed=true").status_code == 204
     assert client.get(f"/api/tasks/{task_id}").status_code == 404
 
 
@@ -71,5 +74,6 @@ def test_ics_has_timezone_and_two_alarms(client: TestClient, register_user):
 def test_bulk_task_actions(client: TestClient, register_user):
     register_user("bulk")
     ids = [client.post("/api/tasks", json=_task(f"批量任务{i}")).json()["id"] for i in range(2)]
-    assert client.post("/api/tasks/bulk", json={"task_ids": ids, "action": "complete"}).status_code == 204
+    assert client.post("/api/tasks/bulk", json={"task_ids": ids, "action": "complete"}).status_code == 422
+    assert client.post("/api/tasks/bulk", json={"task_ids": ids, "action": "complete", "confirmed": True}).status_code == 204
     assert all(item["status"] == "completed" for item in client.get("/api/tasks?status=completed").json() if item["id"] in ids)

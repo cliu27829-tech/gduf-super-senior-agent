@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("registers and completes the three real MVP workflows", async ({ page }) => {
+  test.setTimeout(180_000);
   const suffix = `${Date.now()}`;
   const email = `e2e-${suffix}@example.com`;
   const username = `e2e${suffix.slice(-8)}`;
@@ -22,7 +23,8 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
     else if (status >= 400 && !(status === 401 && /\/api\/auth\/(me|refresh)$/.test(response.url()))) clientErrors.push(`${status} ${response.url()}`);
   });
 
-  await page.goto("/register");
+  await page.goto("/register", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "创建账号" })).toBeVisible();
   await page.getByLabel("用户名").fill(username);
   await page.getByLabel("昵称").fill("端到端同学");
   await page.getByLabel("邮箱").fill(email);
@@ -31,7 +33,11 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   await page.getByRole("button", { name: "注册并登录" }).click();
   await expect(page.getByRole("heading", { name: /端到端同学，今天先做哪一件/ })).toBeVisible();
 
-  await page.reload();
+  // Vite imports the public Google Fonts stylesheet. In a restricted test
+  // network the stylesheet can keep DOMContentLoaded pending even though the
+  // SPA has already committed and rendered, so persistence is asserted from
+  // the rendered dashboard after the navigation commit.
+  await page.reload({ waitUntil: "commit" });
   await expect(page.getByRole("heading", { name: /端到端同学，今天先做哪一件/ })).toBeVisible();
   await page.getByRole("link", { name: "问师兄" }).first().click();
   await expect(page.getByRole("heading", { name: "问问大师兄" })).toBeVisible();
@@ -63,6 +69,17 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   await expect(food.getByText("饭堂与档口")).toBeVisible();
   await expect(food.getByText("来源", { exact: true })).toBeVisible();
 
+  await page.getByRole("link", { name: "校园地图" }).first().click();
+  await expect(page.getByRole("heading", { name: "需要配置高德地图凭据" })).toBeVisible();
+  await expect(page.getByText("北苑饭堂", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "办事流程" }).first().click();
+  await page.getByRole("button", { name: /校园卡丢失挂失与补卡/ }).click();
+  await expect(page.getByText("校园卡丢卡挂失补卡流程")).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "确认并保存为任务" }).click();
+  await expect(page.getByText(/已保存 \d+ 条任务/)).toBeVisible();
+
   await page.getByRole("link", { name: "处理通知" }).first().click();
   await page.getByLabel("通知文本").fill("请各班同学于2099年9月3日下午5点前提交学生信息表，文件命名为学号+姓名，发送给班长。材料：学生信息表");
   await page.getByRole("button", { name: "解析通知" }).click();
@@ -75,7 +92,7 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   await page.getByRole("link", { name: "前往任务中心" }).click();
   await expect(page.getByText("E2E 学生信息表", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "编辑" }).click();
+  await page.locator("article.task-table-row").filter({ hasText: "E2E 学生信息表" }).getByRole("button", { name: "编辑" }).click();
   await page.getByLabel("标题").fill("E2E 已编辑任务");
   await page.getByLabel("提交方式").fill("班群文件");
   await page.getByRole("button", { name: "保存任务" }).click();
@@ -101,7 +118,7 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   await expect(page.getByText("E2E 已编辑任务", { exact: true })).toBeVisible();
 
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "删除" }).click();
+  await page.locator("article.task-table-row").filter({ hasText: "E2E 已编辑任务" }).getByRole("button", { name: "删除" }).click();
   await expect(page.getByText("E2E 已编辑任务", { exact: true })).toHaveCount(0);
 
   await page.getByRole("link", { name: "端" }).click();

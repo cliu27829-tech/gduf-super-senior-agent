@@ -158,20 +158,22 @@ describe("campus workflows", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("饭堂服务暂时不可用");
   });
 
-  it("filters map locations and opens a sourced detail drawer", async () => {
+  it("shows an honest map configuration state and keeps sourced location search usable", async () => {
     vi.stubGlobal("fetch", routeFetch({
       "/api/auth/me": user,
       "/api/campuses": [campus],
+      "/api/map/status": { provider: "amap", webservice_configured: false, security_proxy_configured: false },
       "/api/locations": [
         { id: "lib", campus_id: campus.id, name: "图书馆", aliases: [], category: "library", sub_category: "", description: "自习", address: "校园内", area: "东区", floor: "", latitude: null, longitude: null, map_x: 0.3, map_y: 0.4, opening_hours: "待核验", phone: "", services: [], payment_methods: [], verification_status: "verified", verification_method: "manual", verified_at: "2026-08-01T00:00:00Z", verified_by: "admin", confidence: 0.9, freshness_status: "current", data_status: "verified", is_active: true, updated_at: "2026-08-03T00:00:00Z", sources: [{ id: "source-1", title: "校方地点说明", url: "https://example.edu", publisher: "广东金融学院", source_type: "official", published_at: null, fetched_at: null, verified_at: null, confidence: 1, is_official: true }] },
         { id: "shop", campus_id: campus.id, name: "校园超市", aliases: [], category: "supermarket", sub_category: "", description: "", address: "西区", area: "", floor: "", latitude: null, longitude: null, map_x: 0.6, map_y: 0.5, opening_hours: "", phone: "", services: [], payment_methods: [], verification_status: "needs_verification", verification_method: "seed", verified_at: null, verified_by: "", confidence: 0.2, freshness_status: "needs_verification", data_status: "seed", is_active: true, updated_at: "2026-08-03T00:00:00Z", sources: [] },
       ],
     }));
     renderAt("/map", <App />);
-    expect(await screen.findByRole("button", { name: "查看图书馆" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "需要配置高德地图凭据" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /图书馆.*东区/ })).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText(/搜索教学楼/), "图书");
-    expect(screen.queryByRole("button", { name: "查看校园超市" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "查看图书馆" }));
+    expect(screen.queryByText("校园超市")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /图书馆.*东区/ }));
     expect(screen.getByRole("complementary", { name: "地点详情" })).toBeInTheDocument();
     expect(screen.getByText("校方地点说明")).toBeInTheDocument();
   });
@@ -206,6 +208,7 @@ describe("campus workflows", () => {
     vi.stubGlobal("fetch", routeFetch({
       "/api/auth/me": user,
       "/api/campuses": [campus, secondCampus],
+      "/api/map/status": { provider: "amap", webservice_configured: false, security_proxy_configured: false },
       "/api/locations": [],
     }));
     renderAt("/map", <App />);
@@ -253,5 +256,26 @@ describe("campus workflows", () => {
     renderAt("/canteens", <App />);
     expect(await screen.findByText("该校区暂无可公开饭堂记录")).toBeInTheDocument();
     expect(screen.getByText(/不会自动生成饭堂/)).toBeInTheDocument();
+  });
+
+  it("opens a sourced campus process and confirms before saving its steps", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    vi.stubGlobal("fetch", routeFetch({
+      "/api/auth/me": user,
+      "/api/processes/gz-card/create-tasks": [{ id: "process-task", title: "校园卡补办 · 第 1 步" }],
+      "/api/processes": [{
+        id: "gz-card", campus_id: campus.id, title: "校园卡挂失与补办", category: "校园卡",
+        steps: [{ order: 1, text: "先通过官方渠道挂失" }], materials: ["身份证件"],
+        contact: "待核验", audience: "在校学生", location: "待核验", opening_hours: "待核验",
+        online_url: "https://example.edu/card", notes: "办理前确认最新安排", verification_status: "needs_verification",
+        verified_at: null, confidence: 0.5, data_status: "needs_verification", is_active: true,
+        source: { id: "source", title: "官方指引", url: "https://example.edu/card", publisher: "学校", source_type: "official", published_at: null, fetched_at: null, verified_at: null, confidence: 1, is_official: true },
+      }],
+    }));
+    renderAt("/processes", <App />);
+    await userEvent.click(await screen.findByRole("button", { name: /校园卡挂失与补办/ }));
+    expect(screen.getByText("官方指引")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "确认并保存为任务" }));
+    expect(await screen.findByText(/已保存 1 条任务/)).toBeInTheDocument();
   });
 });

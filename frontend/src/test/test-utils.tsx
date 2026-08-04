@@ -22,6 +22,9 @@ export const user = {
   campus_id: campus.id,
   grade: "2026级",
   major: "金融学",
+  preferred_name: "",
+  address_style: "同学",
+  preferred_location_id: null,
   is_active: true,
   created_at: "2026-08-03T00:00:00Z",
 };
