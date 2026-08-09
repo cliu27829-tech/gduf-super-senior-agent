@@ -19,10 +19,11 @@
 - 邮箱注册、登录、退出、自动刷新 Cookie、修改资料/密码与删除账户。
 - 广州校本部、肇庆校区、清远校区独立筛选；地点搜索、来源卡片、学生纠错，以及配置凭据后启用的真实高德 JS 地图、地理编码、步行路线和外部导航。
 - 饭堂、楼层、档口、常见餐品及核验状态；没有可靠今日菜单时明确返回“无实时数据”。
-- TXT/PDF 通知解析、可编辑预览、确认后批量入库，图片 OCR 明确标记为未启用。
-- 任务增删改查、今日/本周/临期/逾期/完成视图、批量操作与 `Asia/Shanghai` ICS 双提醒。
+- TXT/PDF 通知解析、可编辑预览、确认后批量入库，并可继续创建站内提醒、便签与 `Asia/Shanghai` 日历事件；图片 OCR 明确标记为未启用。
+- 任务增删改查、今日/本周/临期/逾期/完成视图、批量操作与 ICS 双提醒；独立 Reminder 支持到期站内 Toast 和已授权的浏览器通知。
+- 轻量便签支持搜索、置顶、编辑与删除，任务、提醒和便签都按用户严格隔离。
 - 私有知识库支持正文、文件和安全 URL 导入，包含文本提取、清洗、SHA-256 去重、中文 BM25、分块、来源详情、重建索引、用户隔离与管理员审核；不会持久化上传原文件。
-- Agent 采用 observe → classify → plan → execute → verify → confirm → remember → respond 管线，覆盖校园、学习、知识检索/导入等意图，具备统一工具注册表、多轮历史、工具/来源卡片、结构化地图动作、失败重试与明确模型错误。
+- Agent 采用 observe → reason → plan → execute → observe tool → replan → verify → respond 管线，由模型生成严格计划并执行最多 4 个工具步骤；SSE 持续返回安全阶段和最终 token，不暴露内部思维文本。
 - 用户可设置希望大师兄使用的称呼、称呼风格和常用地点；校园事实与通用学习建议使用不同回答边界。
 - 校园办事流程可检索并在确认后保存为任务；管理员可维护带来源、时效和核验状态的校园知识资料。
 - 基于角色的管理后台：用户、校区、地点、地图、饭堂、档口、流程、来源、纠错、陈旧数据、日志和导入导出。
@@ -38,7 +39,7 @@ Browser
                  └─ PostgreSQL 16（测试可用 SQLite）
 ```
 
-聊天使用后端统一模型客户端调用 `deepseek-v4-flash`，意图 JSON 通过 Pydantic 校验，并把最近对话历史传给模型。未配置、认证失败、限流或超时时返回明确错误，不用固定文本冒充模型回答。校园事实始终来自数据库工具，不让模型补写地点、电话、档口、菜单或制度。
+聊天使用后端统一模型客户端调用 `deepseek-v4-flash`，默认开启官方 thinking mode 和 `high` reasoning effort；`reasoning_content` 会在后端丢弃，不返回前端、不写聊天记录。未配置、认证失败、限流或超时时返回明确错误，不用固定文本冒充模型回答。校园事实始终来自数据库工具，不让模型补写地点、电话、档口、菜单或制度。
 
 ## 目录
 
@@ -73,13 +74,21 @@ Set-Location backend
 Set-Location frontend
 npm ci
 @"
-VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_API_BASE_URL=
 VITE_AMAP_JS_KEY=你的高德Web端JS_API_Key
 "@ | Set-Content -Encoding UTF8 .env.local
 npm run dev
 ```
 
-打开 `http://127.0.0.1:5173`。开发后端默认可用 SQLite；需要和生产一致时使用 Docker PostgreSQL。高德安全密钥只填写在 `backend/.env` 的 `AMAP_SECURITY_CODE`，不要放入前端。
+打开 `http://127.0.0.1:5173`。`VITE_API_BASE_URL` 留空时统一请求同源 `/api`，由 Vite 转发到后端；不要在需要手机访问时写死 `127.0.0.1:8000`。开发后端默认可用 SQLite；需要和生产一致时使用 Docker PostgreSQL。高德安全密钥只填写在 `backend/.env` 的 `AMAP_SECURITY_CODE`，不要放入前端。
+
+同一 Wi-Fi 下使用手机访问：
+
+```powershell
+.\scripts\start-lan.ps1
+```
+
+脚本会以 `0.0.0.0` 启动两端、检测 5173/8000、健康检查与局域网连通性，并打印本机真实 IPv4 访问地址。脚本只诊断 Windows 防火墙，不会自动修改规则。
 
 ## Docker 一键启动
 
@@ -93,7 +102,7 @@ docker compose up --build
 
 ## 环境变量
 
-必需生产变量：`DATABASE_URL`、`JWT_SECRET`、`REFRESH_TOKEN_SECRET`、`FRONTEND_URL`、`BACKEND_URL`、`ALLOWED_ORIGINS`、`COOKIE_SECURE`、`ADMIN_BOOTSTRAP_EMAIL`、`ADMIN_BOOTSTRAP_PASSWORD`。启用聊天还必须配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_BASE_URL` 默认 `https://api.deepseek.com`，`DEEPSEEK_MODEL` 默认 `deepseek-v4-flash`。启用真实地图需要浏览器公开的 `VITE_AMAP_JS_KEY` 和仅后端可见的 `AMAP_SECURITY_CODE`；`AMAP_WEBSERVICE_KEY` 是可选增强，未配置时地址解析和步行路线使用高德浏览器 JS API。
+必需生产变量：`DATABASE_URL`、`JWT_SECRET`、`REFRESH_TOKEN_SECRET`、`FRONTEND_URL`、`BACKEND_URL`、`ALLOWED_ORIGINS`、`COOKIE_SECURE`、`ADMIN_BOOTSTRAP_EMAIL`、`ADMIN_BOOTSTRAP_PASSWORD`。启用聊天还必须配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_BASE_URL` 默认 `https://api.deepseek.com`，`DEEPSEEK_MODEL` 默认 `deepseek-v4-flash`，`DEEPSEEK_THINKING_ENABLED` 默认 `true`，`DEEPSEEK_REASONING_EFFORT` 默认 `high`。启用真实地图需要浏览器公开的 `VITE_AMAP_JS_KEY` 和仅后端可见的 `AMAP_SECURITY_CODE`；`AMAP_WEBSERVICE_KEY` 是可选增强，未配置时地址解析和步行路线使用高德浏览器 JS API。
 
 生产环境会拒绝弱 JWT Secret 和不安全 Cookie。DeepSeek Key 只在后端读取，不进入浏览器、数据库、日志或 Git。完整说明见 [安全文档](docs/SECURITY.md)。
 
@@ -121,7 +130,7 @@ npm run build
 npm run test:e2e
 ```
 
-当前本地结果（2026-08-09）：后端 60 项、前端 20 项通过，ESLint、TypeScript、Python 编译与 Vite 生产构建通过。Playwright 已分别验证整站 MVP、私有知识、授权 PDF 文本层、真实高德地图和管理员审核；真实 DeepSeek 多轮浏览器流程也已通过，Key、模型原文响应和私有文件路径均未写入测试记录。详见 [持续执行状态](docs/MASTER_EXECUTION_STATE.md) 与 [完整 Agent 冒烟记录](docs/COMPLETE_AGENT_SMOKE_TEST.md)。
+当前本地结果（2026-08-09）：后端 93 项、前端 23 项通过，ESLint、TypeScript、Python 编译与 Vite 正式构建通过。Playwright 已验证 390×844、393×852、412×915 三种聊天移动视口，同源 LAN API 与真实 DeepSeek SSE 浏览器请求均已通过；Key、原始思考内容和私有文件路径未写入测试记录。详见 [最终验收](docs/FINAL_PRODUCT_ACCEPTANCE.md)。
 
 ## 部署
 
@@ -144,7 +153,7 @@ Set-Location backend
 
 ## 数据来源与时效
 
-生产查询默认隐藏 `demo_fixture`。广州现有 7 个地点、2 个历史饭堂和 5 条历史楼层/餐品记录；肇庆有 3 个待核验地点和 1 个待核验饭堂；清远有 1 个可查询校区锚点、2 个隐藏演示点和 1 个隐藏演示饭堂。广州校园卡服务、校区地址使用公开来源线索；快递、医务与饭堂经营项目属于明确标注的历史资料。当前没有可靠实时菜单、当前价格或当前营业状态；地图路线来自配置后的高德 Web 服务，不把种子示意坐标当作 GPS 点位。
+生产查询默认隐藏 `demo_fixture`。清远知识包已包含官方来源支持的校区锚点、图书馆、北/南教学楼、北/南饭堂、敏学楼、笃行楼、北阶、体育馆、南区宿舍与快递驿站；明湖、木兰广场、南区球场及“西饭”作为用户线索保留 `needs_verification`，不会冒充官方或生成随机坐标。学院数据明确区分 13 个“2+2”学院、1 个全学段学院与 4 个产业学院，回答不会把 13 误说成清远全部教学组织。当前没有可靠实时菜单、价格或营业状态；地图由高德底图叠加自建校园 POI，路线只使用核验坐标或校内路径图。
 
 数据分为官方来源、管理员核验、审核后的用户投稿、私有导入、历史信息、普通网页线索、演示数据和待核验数据。前台同时展示核验状态、来源、可信度和时间；“已核验”必须提交证据。地图校区锚点由官方地址实时地理编码，未核验的模型坐标不会写入正式地点。见 [数据来源](docs/DATA_SOURCES.md) 与 [核验清单](docs/DATA_VERIFICATION_CHECKLIST.md)。
 
@@ -154,10 +163,10 @@ Set-Location backend
 
 ## 已知限制
 
-- 三校真实点位、营业时间、饭堂楼层、档口和办事流程仍需学校或现场证据核验。
-- 没有实时菜单、图片 OCR、邮件/短信/浏览器 Push；网站关闭后不会主动推送。
+- 清远多数校内建筑入口坐标、内部步道、营业时间和实时菜单仍需校方地图或现场证据核验；系统会拒绝用待核验点位生成路线。
+- 没有实时菜单、图片 OCR、邮件/短信和 Web Push；本地/LAN HTTP 仅支持网站打开时的站内提醒、已授权浏览器通知与 ICS，网站关闭后的推送需要正式 HTTPS 和 Push 服务。
 - 忘记密码仅展示说明，尚未接入邮件重置。
-- 当前种子数据没有两个可直接互相规划的已核验 GPS 地点；配置高德 JS Key 与安全密钥后可输入真实地址规划路线，WebService Key 可选。未配置时页面明确显示配置提示，不渲染假地图或假路线。
+- 清远目前只有校区锚点和图书馆具备可审计的精确坐标；北教到北饭等内部路线在入口和路径节点核验前会明确说明无法给出准确路线。管理员可用高德卫星底图点击/拖动校准地点，后端已具备校园路径节点与边的数据模型。
 - 线上部署需要用户先登录一个部署平台；目前没有公开 URL。
 
 ## Demo 账号

@@ -26,6 +26,7 @@ data/uploads/
 data/private_imports/
 data/private_indexes/
 data/import_logs/
+data/runtime/
 mobile/node_modules/
 unimate/
 frontend/node_modules/

@@ -401,3 +401,10 @@ class AgentService:
         return await AgentOrchestrator(self.db, self.llm, self).run(
             user, message, conversation_id, campus_id
         )
+
+    async def chat_stream(self, user: User, message: str, conversation_id: str | None, campus_id: str | None, on_event) -> AgentChatResponse:
+        from app.agents.orchestrator import AgentOrchestrator
+
+        return await AgentOrchestrator(self.db, self.llm, self).run(
+            user, message, conversation_id, campus_id, on_event=on_event
+        )

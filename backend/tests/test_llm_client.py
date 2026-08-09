@@ -46,7 +46,9 @@ def test_llm_client_sends_v4_request_without_exposing_reasoning():
     answer = asyncio.run(client.chat_completion([{"role": "user", "content": "你好"}]))
     assert answer == "模型回答"
     assert completions.request["model"] == "deepseek-v4-flash"
-    assert completions.request["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert completions.request["extra_body"] == {"thinking": {"type": "enabled"}}
+    assert completions.request["reasoning_effort"] == "high"
+    assert "temperature" not in completions.request
     assert "api_key" not in completions.request
 
 

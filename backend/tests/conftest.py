@@ -42,6 +42,10 @@ class MockLLMClient:
     @staticmethod
     def _intent(message: str) -> str:
         patterns = (
+            ("daily_summary", ("我今天还有什么", "近期安排")),
+            ("reminder_management", ("提醒我", "设提醒")),
+            ("note_management", ("记一下", "记下来", "便签")),
+            ("campus_fact_search", ("多少个学院", "几个学院", "学院数量", "哪些学院", "学院名单", "产业学院", "2+2")),
             ("knowledge_import", ("导入资料", "上传知识", "保存文章")),
             ("knowledge_search", ("知识库", "查资料", "四六级报名")),
             ("notification_to_tasks", ("通知", "提交课程报告", "生成任务")),
@@ -87,6 +91,12 @@ class MockLLMClient:
         if "高数" in user_message:
             return "这是 Mock LLM 给出的高数学习建议，仅用于自动测试。"
         return "这是 Mock LLM 生成的测试回答。"
+
+    async def stream_completion(self, messages):
+        answer = await self.chat_completion(messages)
+        for part in (answer[: max(1, len(answer) // 2)], answer[max(1, len(answer) // 2):]):
+            if part:
+                yield part
 
 
 @pytest.fixture(scope="session")

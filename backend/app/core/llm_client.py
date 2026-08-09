@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 from uuid import uuid4
 
@@ -85,6 +86,23 @@ class LLMClient:
             )
         return self._client
 
+    def _request(self, messages: list[dict[str, Any]], response_format: dict[str, str] | None = None) -> dict[str, Any]:
+        request: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": 1800,
+            "extra_body": {
+                "thinking": {"type": "enabled" if self.settings.deepseek_thinking_enabled else "disabled"}
+            },
+        }
+        if self.settings.deepseek_thinking_enabled:
+            request["reasoning_effort"] = self.settings.deepseek_reasoning_effort
+        else:
+            request["temperature"] = 0.6
+        if response_format:
+            request["response_format"] = response_format
+        return request
+
     @staticmethod
     def _log_failure(event: str, error: LLMClientError, exc: Exception) -> None:
         logger.warning(
@@ -96,7 +114,7 @@ class LLMClient:
 
     async def chat_completion(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         temperature: float = 0.6,
         *,
         response_format: dict[str, str] | None = None,
@@ -104,15 +122,9 @@ class LLMClient:
         if not self.configured:
             raise LLMNotConfiguredError()
 
-        request: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": 1800,
-            "extra_body": {"thinking": {"type": "disabled"}},
-        }
-        if response_format:
-            request["response_format"] = response_format
+        request = self._request(messages, response_format)
+        if not self.settings.deepseek_thinking_enabled:
+            request["temperature"] = temperature
 
         try:
             response = await self._get_client().chat.completions.create(**request)
@@ -139,6 +151,37 @@ class LLMClient:
             logger.warning("llm_empty_response error_id=%s", error.error_id)
             raise error
         return content.strip()
+
+    async def stream_completion(self, messages: list[dict[str, Any]]) -> AsyncIterator[str]:
+        """Yield only user-visible content; reasoning_content is deliberately discarded."""
+        if not self.configured:
+            raise LLMNotConfiguredError()
+        request = self._request(messages)
+        request["stream"] = True
+        try:
+            stream = await self._get_client().chat.completions.create(**request)
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                content = getattr(chunk.choices[0].delta, "content", None)
+                if content:
+                    yield content
+        except AuthenticationError as exc:
+            error = LLMAuthenticationError()
+            self._log_failure("llm_authentication_failed", error, exc)
+            raise error from exc
+        except RateLimitError as exc:
+            error = LLMRateLimitError()
+            self._log_failure("llm_rate_limited", error, exc)
+            raise error from exc
+        except APITimeoutError as exc:
+            error = LLMTimeoutError()
+            self._log_failure("llm_timeout", error, exc)
+            raise error from exc
+        except (APIConnectionError, APIStatusError) as exc:
+            error = LLMProviderError()
+            self._log_failure("llm_provider_failed", error, exc)
+            raise error from exc
 
 
 @lru_cache

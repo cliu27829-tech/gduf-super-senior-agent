@@ -68,6 +68,40 @@ class CampusMap(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class CampusCollege(Base, TimestampMixin):
+    __tablename__ = "campus_colleges"
+    __table_args__ = (UniqueConstraint("campus_id", "name", "education_mode", name="uq_campus_college_mode"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campus_id: Mapped[str] = mapped_column(ForeignKey("campuses.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(160), index=True)
+    education_mode: Mapped[str] = mapped_column(String(80), index=True)
+    grades: Mapped[list[str]] = mapped_column(JSON, default=list)
+    source_url: Mapped[str] = mapped_column(String(1000), default="")
+    source_title: Mapped[str] = mapped_column(String(255), default="")
+    source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+
+
+class CampusFact(Base, TimestampMixin):
+    __tablename__ = "campus_facts"
+    __table_args__ = (Index("ix_campus_fact_subject_predicate", "campus_id", "subject", "predicate"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campus_id: Mapped[str] = mapped_column(ForeignKey("campuses.id", ondelete="CASCADE"), index=True)
+    subject: Mapped[str] = mapped_column(String(180), index=True)
+    predicate: Mapped[str] = mapped_column(String(120), index=True)
+    object: Mapped[str] = mapped_column(Text)
+    aliases: Mapped[list[str]] = mapped_column(JSON, default=list)
+    source_url: Mapped[str] = mapped_column(String(1000), default="")
+    source_title: Mapped[str] = mapped_column(String(255), default="")
+    source_type: Mapped[str] = mapped_column(String(60), default="official")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    verification_status: Mapped[str] = mapped_column(String(40), default="needs_verification", index=True)
+
+
 class User(Base, TimestampMixin):
     __tablename__ = "users"
     __table_args__ = (UniqueConstraint("email", name="uq_users_email"), UniqueConstraint("username", name="uq_users_username"))
@@ -182,6 +216,38 @@ class Location(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     campus: Mapped[Campus] = relationship()
     sources: Mapped[list[Source]] = relationship(secondary=location_sources)
+
+
+class CampusPathNode(Base, TimestampMixin):
+    __tablename__ = "campus_path_nodes"
+    __table_args__ = (UniqueConstraint("campus_id", "name", name="uq_campus_path_node_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campus_id: Mapped[str] = mapped_column(ForeignKey("campuses.id", ondelete="CASCADE"), index=True)
+    location_id: Mapped[str | None] = mapped_column(ForeignKey("locations.id", ondelete="SET NULL"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    map_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    map_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    source_url: Mapped[str] = mapped_column(String(1000), default="")
+
+
+class CampusPathEdge(Base, TimestampMixin):
+    __tablename__ = "campus_path_edges"
+    __table_args__ = (UniqueConstraint("from_node_id", "to_node_id", name="uq_campus_path_edge"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campus_id: Mapped[str] = mapped_column(ForeignKey("campuses.id", ondelete="CASCADE"), index=True)
+    from_node_id: Mapped[str] = mapped_column(ForeignKey("campus_path_nodes.id", ondelete="CASCADE"), index=True)
+    to_node_id: Mapped[str] = mapped_column(ForeignKey("campus_path_nodes.id", ondelete="CASCADE"), index=True)
+    distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
+    instruction: Mapped[str] = mapped_column(String(500), default="")
+    bidirectional: Mapped[bool] = mapped_column(Boolean, default=True)
+    accessible: Mapped[bool] = mapped_column(Boolean, default=True)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    source_url: Mapped[str] = mapped_column(String(1000), default="")
 
 
 class Canteen(Base, TimestampMixin):
@@ -379,6 +445,38 @@ class TaskReminder(Base):
     channel: Mapped[str] = mapped_column(String(30), default="ics")
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     task: Mapped[Task] = relationship(back_populates="reminders")
+
+
+class Note(Base, TimestampMixin):
+    __tablename__ = "notes"
+    __table_args__ = (Index("ix_notes_owner_updated", "user_id", "updated_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    content: Mapped[str] = mapped_column(Text)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    source_message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.id", ondelete="SET NULL"), nullable=True)
+
+
+class Reminder(Base, TimestampMixin):
+    __tablename__ = "reminders"
+    __table_args__ = (Index("ix_reminders_owner_status_time", "user_id", "status", "remind_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    note_id: Mapped[str | None] = mapped_column(ForeignKey("notes.id", ondelete="SET NULL"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    body: Mapped[str] = mapped_column(Text, default="")
+    remind_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Shanghai")
+    repeat_rule: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(30), default="scheduled", index=True)
+    channels: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["in_app"])
+    triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Conversation(Base, TimestampMixin):

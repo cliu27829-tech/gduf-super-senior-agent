@@ -16,6 +16,7 @@ export default function NotificationsPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<Task[]>([]);
+  const [actionMessage, setActionMessage] = useState("");
 
   const parse = async (event: FormEvent) => {
     event.preventDefault();
@@ -78,6 +79,32 @@ export default function NotificationsPage() {
   };
 
   const hasExpired = Boolean(result?.action_items.some((item) => item.is_expired));
+  const saveAsNote = async () => {
+    if (!result || !window.confirm("把这份通知摘要保存为便签？")) return;
+    setBusy(true); setActionMessage("");
+    try {
+      await api("/notes", { method: "POST", body: JSON.stringify({
+        title: result.notice.title || "通知摘要",
+        content: [result.notice.summary, ...result.rules, ...result.action_items.map((item) => `${item.title}：${item.action}`)].filter(Boolean).join("\n"),
+        tags: ["通知"], pinned: false, confirmed: true,
+      }) });
+      setActionMessage("通知摘要已保存到我的便签");
+    } catch (reason) { setActionMessage(reason instanceof Error ? reason.message : "便签保存失败"); }
+    finally { setBusy(false); }
+  };
+  const setDeadlineReminder = async () => {
+    const action = result?.action_items.find((item) => item.deadline && new Date(item.deadline).getTime() > Date.now());
+    if (!action?.deadline) return setActionMessage("没有找到未来的明确截止时间，无法安全创建提醒。");
+    const deadline = new Date(action.deadline);
+    const suggested = new Date(Math.max(Date.now() + 60_000, deadline.getTime() - 3 * 60 * 60 * 1000));
+    if (!window.confirm(`确认在 ${suggested.toLocaleString("zh-CN")} 提醒“${action.title}”？`)) return;
+    setBusy(true); setActionMessage("");
+    try {
+      await api("/reminders", { method: "POST", body: JSON.stringify({ title: `任务提醒：${action.title}`, body: action.action, remind_at: suggested.toISOString(), timezone: "Asia/Shanghai", channels: ["in_app"], confirmed: true }) });
+      setActionMessage("提醒已保存，可在个人中心查看");
+    } catch (reason) { setActionMessage(reason instanceof Error ? reason.message : "提醒保存失败"); }
+    finally { setBusy(false); }
+  };
 
   return (
     <section className="page section-wrap notification-page">
@@ -100,6 +127,12 @@ export default function NotificationsPage() {
           <p className="eyebrow">通知摘要</p><h2 id="notice-summary-title">{result.notice.title || "未识别标题"}</h2>
           <div className="summary-grid"><span><small>发布日期</small>{result.notice.notice_date_text || "未说明"}</span><span><small>发布方</small>{result.notice.publisher || "未识别"}</span><span><small>适用校区</small>{result.notice.campuses.join("、") || "未限定"}</span><span><small>适用对象</small>{result.notice.audience.join("、") || "未限定"}</span></div>
           {result.notice.summary && <p>{result.notice.summary}</p>}
+        </section>
+
+        <section className="panel notification-actions" aria-labelledby="notification-actions-title">
+          <div><p className="eyebrow">下一步</p><h2 id="notification-actions-title">让解析结果真正可执行</h2><p>所有写入动作都需要你确认；本地提醒为站内通知，日历可导出到手机。</p></div>
+          <div className="button-row"><button className="ghost-button" type="button" disabled={busy} onClick={() => void saveAsNote()}>添加便签</button><button className="ghost-button" type="button" disabled={busy} onClick={() => void setDeadlineReminder()}>设置提醒</button>{saved.length > 0 ? <a className="ghost-button" href={apiFileUrl(`/tasks/export/ics?${saved.map((task) => `task_ids=${encodeURIComponent(task.id)}`).join("&")}`)}>加入日历（ICS）</a> : <button className="ghost-button" type="button" disabled>保存任务后加入日历</button>}</div>
+          {actionMessage && <p className="action-message" role="status">{actionMessage}</p>}
         </section>
 
         <section className="panel"><p className="eyebrow">重要规则</p><h2>先确认是否符合条件</h2>{result.rules.length ? <ol className="notice-rule-list">{result.rules.map((rule) => <li key={rule}>{rule}</li>)}</ol> : <p>没有识别到独立规则。</p>}</section>

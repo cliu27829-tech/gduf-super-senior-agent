@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import hash_password
-from app.models.entities import Campus, CampusProcess, Canteen, FoodStall, KnowledgeDocument, Location, Source, User
+from app.models.entities import (
+    Campus, CampusCollege, CampusFact, CampusProcess, Canteen, FoodStall, KnowledgeDocument, Location, Source, User,
+)
 
 
 CAMPUS_DEFINITIONS = (
@@ -177,6 +179,44 @@ def seed_database(db: Session) -> None:
             stall.verified_at = _date(item.get("verified_at"))
             stall.confidence = float(item.get("confidence", 0))
             stall.is_active = bool(item.get("is_active", True))
+
+    qingyuan_facts = campus_root / "qingyuan" / "facts.json"
+    if qingyuan_facts.exists():
+        package = json.loads(qingyuan_facts.read_text(encoding="utf-8"))
+        source = package["source"]
+        campus = campus_by_name["清远校区"]
+        for item in package.get("colleges", []):
+            row = db.scalar(select(CampusCollege).where(
+                CampusCollege.campus_id == campus.id,
+                CampusCollege.name == item["name"],
+                CampusCollege.education_mode == item["education_mode"],
+            ))
+            if not row:
+                row = CampusCollege(campus_id=campus.id, name=item["name"], education_mode=item["education_mode"])
+                db.add(row)
+            row.grades = item.get("grades", [])
+            row.source_url = source["url"]
+            row.source_title = source["title"]
+            row.source_published_at = _date(source["published_at"])
+            row.verified = True
+            row.note = "学院分类按官方清远校区简介的办学模式口径记录。"
+        for item in package.get("facts", []):
+            row = db.scalar(select(CampusFact).where(
+                CampusFact.campus_id == campus.id,
+                CampusFact.subject == item["subject"],
+                CampusFact.predicate == item["predicate"],
+            ))
+            if not row:
+                row = CampusFact(campus_id=campus.id, subject=item["subject"], predicate=item["predicate"], object=item["object"])
+                db.add(row)
+            row.object = item["object"]
+            row.aliases = item.get("aliases", [])
+            row.source_url = source["url"]
+            row.source_title = source["title"]
+            row.source_type = "official_page"
+            row.published_at = _date(source["published_at"])
+            row.verified = True
+            row.verification_status = "verified"
 
     old_demo_stall = db.get(FoodStall, "gz-north-demo-stall")
     if old_demo_stall:

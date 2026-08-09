@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from io import BytesIO
 from hashlib import sha256
 
@@ -8,10 +9,11 @@ from pypdf import PdfReader
 
 from app.core.config import get_settings
 from app.core.dependencies import CurrentUser, DbSession
-from app.models.entities import Task, TaskReminder, UploadedDocument
+from app.models.entities import Reminder, Task, TaskReminder, UploadedDocument
 from app.schemas.agent import NotificationConfirmRequest, NotificationParseResponse
 from app.schemas.tasks import TaskRead
 from app.services.notification_service import NotificationService
+from app.services.time_service import now_china
 
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -94,6 +96,19 @@ def confirm_notification(payload: NotificationConfirmRequest, user: CurrentUser,
         db.add(task)
         db.flush()
         db.add_all([TaskReminder(task_id=task.id, minutes_before=1440), TaskReminder(task_id=task.id, minutes_before=180)])
+        if task.deadline:
+            for minutes in (1440, 180):
+                remind_at = task.deadline - timedelta(minutes=minutes)
+                if now_china(remind_at) > now_china():
+                    db.add(Reminder(
+                        user_id=user.id,
+                        task_id=task.id,
+                        title=f"任务提醒：{task.title}",
+                        body=task.description,
+                        remind_at=now_china(remind_at),
+                        timezone="Asia/Shanghai",
+                        channels=["in_app"],
+                    ))
         tasks.append(task)
     db.commit()
     for task in tasks:

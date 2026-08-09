@@ -66,3 +66,49 @@ export async function api<T>(path: string, options: ApiOptions = {}, retry = tru
 export function apiFileUrl(path: string): string {
   return `${API_URL}/api${path}`;
 }
+
+export type StreamEvent = { event: "stage" | "tool" | "token" | "final" | "error"; data: Record<string, unknown> };
+
+export async function streamAgentChat(
+  payload: Record<string, unknown>,
+  onEvent: (event: StreamEvent) => void,
+  signal: AbortSignal,
+  retry = true,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}/api/agent/chat/stream`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (reason) {
+    if (reason instanceof DOMException && reason.name === "AbortError") throw reason;
+    throw new ApiError("无法连接后端服务，请稍后重试", 0);
+  }
+  if (response.status === 401 && retry) {
+    const refreshed = await fetch(`${API_URL}/api/auth/refresh`, { method: "POST", credentials: "include" });
+    if (refreshed.ok) return streamAgentChat(payload, onEvent, signal, false);
+  }
+  if (!response.ok || !response.body) throw new ApiError(await parseError(response), response.status);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() || "";
+    for (const frame of frames) {
+      const event = frame.split("\n").find((line) => line.startsWith("event: "))?.slice(7) as StreamEvent["event"] | undefined;
+      const dataLine = frame.split("\n").find((line) => line.startsWith("data: "));
+      if (!event || !dataLine) continue;
+      const data = JSON.parse(dataLine.slice(6)) as Record<string, unknown>;
+      onEvent({ event, data });
+      if (event === "error") throw new ApiError(String(data.message || "对话处理失败"), Number(data.status || 500));
+    }
+    if (done) break;
+  }
+}

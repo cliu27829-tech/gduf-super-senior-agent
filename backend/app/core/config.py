@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-v4-flash"
+    deepseek_thinking_enabled: bool = True
+    deepseek_reasoning_effort: str = "high"
     llm_connect_timeout_seconds: float = 10.0
     llm_read_timeout_seconds: float = 60.0
     llm_max_retries: int = 2
@@ -61,6 +63,14 @@ class Settings(BaseSettings):
         normalized = value.lower()
         if normalized not in {"lax", "strict", "none"}:
             raise ValueError("COOKIE_SAMESITE must be lax, strict or none")
+        return normalized
+
+    @field_validator("deepseek_reasoning_effort")
+    @classmethod
+    def validate_reasoning_effort(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"high", "max"}:
+            raise ValueError("DEEPSEEK_REASONING_EFFORT must be high or max")
         return normalized
 
     @model_validator(mode="after")

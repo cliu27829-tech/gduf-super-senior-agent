@@ -132,6 +132,36 @@ export type Task = {
   updated_at: string;
 };
 
+export type Reminder = {
+  id: string;
+  user_id: string;
+  task_id: string | null;
+  note_id: string | null;
+  title: string;
+  body: string;
+  remind_at: string;
+  timezone: "Asia/Shanghai";
+  repeat_rule: string;
+  status: "scheduled" | "triggered" | "dismissed" | "completed" | "cancelled";
+  channels: ("in_app" | "browser")[];
+  created_at: string;
+  updated_at: string;
+  triggered_at: string | null;
+  dismissed_at: string | null;
+};
+
+export type Note = {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  pinned: boolean;
+  source_message_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CampusProcess = {
   id: string;
   campus_id: string | null;

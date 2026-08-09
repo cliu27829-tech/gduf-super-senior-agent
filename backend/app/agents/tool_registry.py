@@ -22,6 +22,8 @@ TOOL_NAMES = (
     "import_local_documents", "import_article_url", "import_text_content",
     "search_campus_knowledge", "search_learning_materials", "get_source_details", "reindex_documents",
     "get_user_profile", "update_user_preference", "get_preferred_address",
+    "search_campus_facts", "list_campus_colleges", "search_express_locations", "preview_reminder", "list_reminders",
+    "preview_note", "list_notes", "get_daily_summary",
 )
 
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import csv
+import asyncio
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 import json
 
-from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from typing import Annotated
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -14,6 +16,7 @@ from app.core.dependencies import AdminUser, DbSession
 from app.models.entities import (
     AdminAuditLog,
     Campus,
+    CampusFact,
     CampusMap,
     CampusProcess,
     Canteen,
@@ -37,10 +40,15 @@ from app.schemas.admin import (
     CampusWrite,
     CanteenWrite,
     FeedbackReview,
+    FactConfirmRequest,
+    FactResearchRequest,
+    FactResearchResponse,
     ProcessWrite,
     SourceWrite,
     StallWrite,
 )
+from app.core.llm_client import LLMClient, get_llm_client
+from app.services.knowledge_service import KnowledgeImportError, fetch_article
 from app.schemas.auth import UserRead
 from app.schemas.campus import (
     CampusRead, CanteenRead, KnowledgeRead, KnowledgeWrite, LocationCreate, LocationRead, LocationUpdate, ProcessRead, SourceRead, StallRead,
@@ -48,6 +56,81 @@ from app.schemas.campus import (
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+LLMDependency = Annotated[LLMClient, Depends(get_llm_client)]
+
+
+@router.get("/facts")
+def campus_facts(admin: AdminUser, db: DbSession) -> list[dict]:
+    del admin
+    rows = list(db.scalars(select(CampusFact).order_by(CampusFact.updated_at.desc())))
+    return [{
+        "id": row.id, "campus_id": row.campus_id, "subject": row.subject, "predicate": row.predicate,
+        "object": row.object, "aliases": row.aliases, "source_url": row.source_url,
+        "source_title": row.source_title, "source_type": row.source_type, "published_at": row.published_at,
+        "verified": row.verified, "verification_status": row.verification_status, "updated_at": row.updated_at,
+    } for row in rows]
+
+
+@router.post("/facts/research", response_model=FactResearchResponse)
+async def research_campus_facts(payload: FactResearchRequest, admin: AdminUser, db: DbSession, llm: LLMDependency) -> FactResearchResponse:
+    if not db.get(Campus, payload.campus_id):
+        raise HTTPException(status_code=404, detail="校区不存在")
+    try:
+        title, content = await asyncio.to_thread(fetch_article, payload.url, max_bytes=get_settings().max_upload_bytes)
+    except KnowledgeImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    prompt = (
+        "你是校园事实候选提取器，只输出JSON对象，键为candidates。"
+        "每条包含subject,predicate,object,aliases,published_at。只提取原文明确陈述、可独立核验的事实；"
+        "不要把整篇文章作为一个事实，不推断坐标、路线、价格、营业状态。最多30条。"
+    )
+    raw = await llm.chat_completion(
+        [{"role": "system", "content": prompt}, {"role": "user", "content": content[:24000]}],
+        response_format={"type": "json_object"}, temperature=0.2,
+    )
+    try:
+        items = json.loads(raw).get("candidates", [])
+        official = payload.url.lower().split("/", 3)[2].endswith("gduf.edu.cn")
+        candidates = [{
+            **item,
+            "source_url": payload.url,
+            "source_title": title,
+            "source_type": "official_page" if official else "public_web",
+            "verified": False,
+        } for item in items[:30]]
+        response = FactResearchResponse(source_title=title, source_url=payload.url, candidates=candidates)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="模型未返回有效的事实候选") from exc
+    audit(db, admin.id, "facts.research", "campus_fact", "", payload.url)
+    db.commit()
+    return response
+
+
+@router.post("/facts/confirm", status_code=status.HTTP_201_CREATED)
+def confirm_campus_facts(payload: FactConfirmRequest, admin: AdminUser, db: DbSession) -> list[dict]:
+    if not payload.confirmed:
+        raise HTTPException(status_code=422, detail="保存事实前必须人工确认")
+    if not db.get(Campus, payload.campus_id):
+        raise HTTPException(status_code=404, detail="校区不存在")
+    rows = []
+    for candidate in payload.candidates:
+        row = CampusFact(
+            campus_id=payload.campus_id,
+            subject=candidate.subject,
+            predicate=candidate.predicate,
+            object=candidate.object,
+            aliases=candidate.aliases,
+            source_url=candidate.source_url,
+            source_title=candidate.source_title,
+            source_type=candidate.source_type,
+            published_at=candidate.published_at,
+            verified=candidate.verified,
+            verification_status="verified" if candidate.verified else "needs_verification",
+        )
+        db.add(row); db.flush(); rows.append(row)
+        audit(db, admin.id, "facts.confirm", "campus_fact", row.id, f"{row.subject}/{row.predicate}")
+    db.commit()
+    return [{"id": row.id, "subject": row.subject, "predicate": row.predicate, "verified": row.verified} for row in rows]
 
 
 def validate_coordinate_evidence(

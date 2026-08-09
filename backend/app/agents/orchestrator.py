@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from sqlalchemy.orm import Session
+from fastapi.encoders import jsonable_encoder
 
 from app.agents.contracts import ToolResponse
 from app.agents.executor import AgentExecutor
@@ -29,6 +33,14 @@ DISPLAY = {
     "import_local_documents": ("knowledge_import", "导入私有知识"),
     "import_article_url": ("knowledge_import", "导入文章链接"),
     "build_calendar_download": ("calendar_download", "日历导出"),
+    "search_campus_facts": ("campus_fact_search", "校园事实"),
+    "list_campus_colleges": ("campus_colleges", "学院口径"),
+    "preview_reminder": ("reminder_preview", "提醒预览"),
+    "list_reminders": ("reminder_list", "我的提醒"),
+    "preview_note": ("note_preview", "便签预览"),
+    "list_notes": ("note_list", "我的便签"),
+    "get_daily_summary": ("daily_summary", "近期安排"),
+    "search_express_locations": ("express_locations", "快递地点"),
 }
 
 
@@ -39,7 +51,7 @@ class AgentOrchestrator:
         self.legacy_service = legacy_service
         self.memory = Memory(db)
         self.classifier = IntentClassifier(llm)
-        self.planner = Planner()
+        self.planner = Planner(llm)
         self.verifier = Verifier()
 
     @staticmethod
@@ -53,19 +65,35 @@ class AgentOrchestrator:
         message: str,
         conversation_id: str | None,
         campus_id: str | None,
+        on_event: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
     ) -> AgentChatResponse:
+        async def emit(event: str, data: dict[str, Any]) -> None:
+            if on_event:
+                await on_event(event, data)
+
         conversation = self.memory.conversation(user, conversation_id, campus_id, message)
         observation = self.memory.observe(user, conversation)
+        await emit("stage", {"stage": "classify", "label": "正在理解你的问题"})
         decision = await self.classifier.classify(message)
-        plan = self.planner.build(decision)
+        await emit("stage", {"stage": "plan", "label": "正在规划需要核对的信息"})
+        plan = await self.planner.build(decision, message)
         user_message = Message(conversation_id=conversation.id, role="user", content=message, intent=decision.intent)
         self.db.add(user_message)
         self.db.flush()
 
         toolbox = AgentToolbox(self.db, user, observation.campus_id)
-        tool_responses = await AgentExecutor(toolbox, self.legacy_service).execute(plan, message, observation.campus_id)
+        executor = AgentExecutor(toolbox, self.legacy_service)
+        await emit("stage", {"stage": "execute", "label": "正在查询校园资料" if plan.steps else "正在组织回答"})
+        tool_responses = await executor.execute(plan, message, observation.campus_id, observation.history)
+        for tool in tool_responses:
+            await emit("tool", {"tool": tool.tool_name, "success": tool.success, "summary": tool.summary})
+        if replan := await self.planner.replan(decision, message, plan, tool_responses):
+            await emit("stage", {"stage": "replan", "label": "正在根据查询结果调整计划"})
+            tool_responses.extend(await executor.execute(replan, message, observation.campus_id, observation.history))
+            plan = replan
+        await emit("stage", {"stage": "verify", "label": "正在核对来源与校区"})
         verification = self.verifier.verify(observation, plan, tool_responses)
-        trusted_tools = tool_responses if verification.valid else [
+        trusted_tools = tool_responses if verification.checks.get("campus_isolated", False) else [
             ToolResponse(
                 tool_name=tool.tool_name, success=False, summary="工具结果未通过校区或完整性校验",
                 error="verification_failed", verification=verification.model_dump(mode="json"),
@@ -76,7 +104,18 @@ class AgentOrchestrator:
             *observation.history,
             {"role": "user", "content": message},
         ]
-        answer = await self.llm.chat_completion(messages, temperature=0.6)
+        await emit("stage", {"stage": "respond", "label": "正在生成回答"})
+        if on_event:
+            chunks: list[str] = []
+            async for token in self.llm.stream_completion(messages):
+                chunks.append(token)
+                await emit("token", {"content": token})
+            answer = "".join(chunks).strip()
+            if not answer:
+                from app.core.llm_client import LLMProviderError
+                raise LLMProviderError()
+        else:
+            answer = await self.llm.chat_completion(messages, temperature=0.6)
         display_results = [self._display(tool) for tool in tool_responses]
         locations: list[dict] = []
         route: dict | None = None
@@ -113,7 +152,7 @@ class AgentOrchestrator:
             content=answer,
             intent=decision.intent,
             tool_results=[item.model_dump(mode="json") for item in display_results],
-            sources=sources,
+            sources=jsonable_encoder(sources),
         )
         self.db.add(assistant)
         self.db.flush()
@@ -127,20 +166,23 @@ class AgentOrchestrator:
                 verification={
                     **tool.verification,
                     "intent": decision.intent,
-                    "plan": plan.tool_names,
+                    "plan": [step.model_dump(mode="json") for step in plan.steps],
+                    "agent_round": plan.agent_round,
                     "tools_called": [item.tool_name for item in tool_responses],
                     "tool_success": {item.tool_name: item.success for item in tool_responses},
-                    "pipeline": ["observe", "classify", "plan", "execute", "verify", "confirm", "remember", "respond"],
+                    "verification": verification.model_dump(mode="json"),
+                    "final_status": "success" if verification.valid else "verification_failed",
+                    "pipeline": ["observe", "reason", "plan", "execute", "observe_tool", "replan", "verify", "respond"],
                 },
                 error_code=tool.error or "",
             ))
         self.db.commit()
         self.db.refresh(assistant)
-        return AgentChatResponse(
+        response = AgentChatResponse(
             conversation_id=conversation.id,
             message_id=assistant.id,
             intent=decision.intent,
-            plan=plan.tool_names,
+            plan=plan.required_tools,
             tools_called=[tool.tool_name for tool in tool_responses],
             tool_success={tool.tool_name: tool.success for tool in tool_responses},
             answer=answer,
@@ -155,3 +197,5 @@ class AgentOrchestrator:
             data_status=verification.data_status,
             current_time=observation.current_time,
         )
+        await emit("final", response.model_dump(mode="json"))
+        return response

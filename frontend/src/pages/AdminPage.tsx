@@ -10,7 +10,7 @@ type AdminRecord = Record<string, unknown>;
 const sections = [
   ["", "仪表盘"], ["users", "用户"], ["campuses", "校区"], ["locations", "地点"], ["maps", "地图"],
   ["canteens", "饭堂"], ["stalls", "档口"], ["processes", "办事流程"], ["sources", "资料来源"],
-  ["knowledge", "知识资料"],
+  ["knowledge", "知识资料"], ["facts", "校园事实研究"],
   ["feedback", "纠错审核"], ["stale", "过期数据"], ["logs", "系统日志"], ["data", "导入导出"],
 ];
 
@@ -62,6 +62,7 @@ function AdminContent({ section, data, campuses, reload, setNotice, setError }: 
   if (!section) return <Dashboard data={data as AdminRecord} />;
   if (section === "locations") return <LocationsAdmin rows={(data || []) as Location[]} campuses={campuses} reload={reload} setNotice={setNotice} setError={setError} />;
   if (section === "knowledge") return <><KnowledgeReviewAdmin rows={(data || []) as AdminRecord[]} reload={reload} setNotice={setNotice} setError={setError} /><ManagedRecords section={section} rows={(data || []) as AdminRecord[]} campuses={campuses} reload={reload} setNotice={setNotice} setError={setError} /></>;
+  if (section === "facts") return <FactResearchAdmin rows={(data || []) as AdminRecord[]} campuses={campuses} reload={reload} setNotice={setNotice} setError={setError} />;
   if (section === "feedback") return <FeedbackAdmin rows={(data || []) as AdminRecord[]} reload={reload} setNotice={setNotice} />;
   if (section === "users") return <UsersAdmin rows={(data || []) as AdminRecord[]} reload={reload} />;
   if (section === "data") return <DataAdmin setNotice={setNotice} setError={setError} />;
@@ -69,6 +70,32 @@ function AdminContent({ section, data, campuses, reload, setNotice, setError }: 
   const rows = Array.isArray(data) ? data as AdminRecord[] : [];
   if (managedSections.has(section)) return <ManagedRecords section={section} rows={rows} campuses={campuses} reload={reload} setNotice={setNotice} setError={setError} />;
   return <GenericTable rows={rows} section={section} />;
+}
+
+type FactCandidate = { subject: string; predicate: string; object: string; aliases: string[]; source_url: string; source_title: string; source_type: string; published_at: string | null; verified: boolean };
+
+function FactResearchAdmin({ rows, campuses, reload, setNotice, setError }: { rows: AdminRecord[]; campuses: Campus[]; reload: () => Promise<unknown>; setNotice: (value: string) => void; setError: (value: string) => void }) {
+  const [url, setUrl] = useState("");
+  const [campusId, setCampusId] = useState(campuses[0]?.id || "");
+  const [candidates, setCandidates] = useState<FactCandidate[]>([]);
+  const [busy, setBusy] = useState(false);
+  const research = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError("");
+    try {
+      const result = await api<{ candidates: FactCandidate[] }>("/admin/facts/research", { method: "POST", body: JSON.stringify({ url, campus_id: campusId }), timeoutMs: 90000 });
+      setCandidates(result.candidates); setNotice(`提取了 ${result.candidates.length} 条候选；尚未写入数据库。`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "事实候选提取失败"); }
+    finally { setBusy(false); }
+  };
+  const update = (index: number, key: keyof FactCandidate, value: FactCandidate[keyof FactCandidate]) => setCandidates((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  const confirm = async () => {
+    if (!candidates.length || !window.confirm("确认把勾选核验状态后的结构化事实写入数据库？")) return;
+    setBusy(true); setError("");
+    try { await api("/admin/facts/confirm", { method: "POST", body: JSON.stringify({ campus_id: campusId, candidates, confirmed: true }) }); setCandidates([]); setNotice("结构化校园事实已保存并记录审计日志"); await reload(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "事实保存失败"); }
+    finally { setBusy(false); }
+  };
+  return <div className="fact-research"><form className="panel stack-form" onSubmit={research}><h2>从公开页面提取事实候选</h2><p>URL 正文只用于提取候选；系统不会把整篇文章直接当成知识事实。确认前不会写入。</p><label>所属校区<select value={campusId} onChange={(event) => setCampusId(event.target.value)}>{campuses.map((campus) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}</select></label><label>公开页面 URL<input type="url" required value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://qyxq.gduf.edu.cn/..." /></label><button className="button" disabled={busy || !campusId}>{busy ? "正在提取…" : "提取事实候选"}</button></form>{candidates.length > 0 && <section className="panel"><div className="panel-heading"><h2>人工核对候选</h2><button className="button compact" disabled={busy} onClick={() => void confirm()}>确认保存</button></div><div className="fact-candidates">{candidates.map((item, index) => <article key={`${item.subject}-${index}`}><label>主体<input value={item.subject} onChange={(event) => update(index, "subject", event.target.value)} /></label><label>关系<input value={item.predicate} onChange={(event) => update(index, "predicate", event.target.value)} /></label><label>事实<textarea rows={3} value={item.object} onChange={(event) => update(index, "object", event.target.value)} /></label><label className="confirmation-check"><input type="checkbox" checked={item.verified} onChange={(event) => update(index, "verified", event.target.checked)} />已人工对照原文核验</label><small><a href={item.source_url} target="_blank" rel="noreferrer">{item.source_title}</a></small><button className="danger-link" onClick={() => setCandidates((current) => current.filter((_, itemIndex) => itemIndex !== index))}>移除</button></article>)}</div></section>}<section className="panel"><h2>已有结构化事实</h2><GenericTable rows={rows} section="facts" /></section></div>;
 }
 
 function KnowledgeReviewAdmin({ rows, reload, setNotice, setError }: { rows: AdminRecord[]; reload: () => Promise<unknown>; setNotice: (value: string) => void; setError: (value: string) => void }) {

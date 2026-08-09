@@ -1,5 +1,8 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { api } from "../api";
 import { useAuth } from "../auth";
+import type { Reminder } from "../types";
 
 const navItems = [
   ["/dashboard", "工作台"],
@@ -23,8 +26,9 @@ function Navigation() {
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${pathname === "/chat" ? "chat-route" : ""}`}>
       <a className="skip-link" href="#main">跳到主要内容</a>
       <header className="site-header">
         <div className="header-inner">
@@ -48,10 +52,36 @@ export function Layout() {
         {user && <div className="mobile-nav"><Navigation /></div>}
       </header>
       <main id="main"><Outlet /></main>
+      {user && <ReminderWatcher />}
       <footer className="site-footer">
         <p>广金大师兄 · 校园信息以来源、核验状态和更新时间为准</p>
-        <p>目前不提供可靠实时菜单或网站关闭后的主动推送；路线仅在高德凭据和核验坐标齐全时启用。</p>
+        <p>目前不提供可靠实时菜单；站内提醒需保持网站打开，HTTPS 部署后才能进一步启用 Web Push。</p>
       </footer>
     </div>
   );
+}
+
+function ReminderWatcher() {
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  useEffect(() => {
+    let active = true;
+    const check = async () => {
+      try {
+        const due = await api<Reminder[]>("/reminders/check", { method: "POST" });
+        if (!active || !due.length) return;
+        setReminders((current) => [...current, ...due.filter((item) => !current.some((existing) => existing.id === item.id))]);
+        if ("Notification" in window && Notification.permission === "granted") {
+          due.filter((item) => item.channels.includes("browser")).forEach((item) => new Notification(item.title, { body: item.body }));
+        }
+      } catch { /* 登录刷新和错误提示由各业务页面处理，轮询保持静默。 */ }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 30_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+  const dismiss = async (item: Reminder) => {
+    setReminders((current) => current.filter((row) => row.id !== item.id));
+    try { await api(`/reminders/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: "dismissed", confirmed: true }) }); } catch { /* toast remains dismissed locally */ }
+  };
+  return <div className="reminder-toasts" aria-live="assertive">{reminders.map((item) => <aside className="reminder-toast" key={item.id}><span>提醒</span><strong>{item.title}</strong>{item.body && <p>{item.body}</p>}<button onClick={() => void dismiss(item)}>知道了</button></aside>)}</div>;
 }

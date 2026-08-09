@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Annotated
+import asyncio
+import json
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 
@@ -55,6 +58,64 @@ async def chat(payload: AgentChatRequest, user: CurrentUser, db: DbSession, llm:
             detail=f"{exc.public_message} 错误编号：{exc.error_id}",
             headers={"X-Error-ID": exc.error_id},
         ) from exc
+
+
+def _resolve_campus(payload: AgentChatRequest, db: DbSession) -> str | None:
+    campus_id = payload.campus_id
+    if payload.campus:
+        campus = db.scalar(select(Campus).where(
+            Campus.is_active.is_(True), (Campus.slug == payload.campus) | (Campus.name == payload.campus)
+        ))
+        if not campus:
+            raise HTTPException(status_code=422, detail="校区不存在")
+        campus_id = campus.id
+    elif campus_id and not db.scalar(select(Campus.id).where(Campus.id == campus_id, Campus.is_active.is_(True))):
+        raise HTTPException(status_code=422, detail="校区不存在")
+    return campus_id
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    payload: AgentChatRequest,
+    user: CurrentUser,
+    db: DbSession,
+    llm: LLMDependency,
+) -> StreamingResponse:
+    campus_id = _resolve_campus(payload, db)
+
+    async def event_stream():
+        queue: asyncio.Queue[tuple[str, dict[str, Any]] | None] = asyncio.Queue()
+
+        async def emit(event: str, data: dict[str, Any]) -> None:
+            await queue.put((event, data))
+
+        async def work() -> None:
+            try:
+                await AgentService(db, llm).chat_stream(user, payload.message, payload.conversation_id, campus_id, emit)
+            except LLMClientError as exc:
+                db.rollback()
+                await emit("error", {"message": exc.public_message, "error_id": exc.error_id, "status": exc.status_code})
+            except Exception:
+                db.rollback()
+                await emit("error", {"message": "对话处理失败，请稍后重试", "status": 500})
+            finally:
+                await queue.put(None)
+
+        worker = asyncio.create_task(work())
+        try:
+            while (item := await queue.get()) is not None:
+                event, data = item
+                yield f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+        finally:
+            if not worker.done():
+                worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/conversations")

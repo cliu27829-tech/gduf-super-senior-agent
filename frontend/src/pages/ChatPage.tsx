@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api";
+import { api, streamAgentChat } from "../api";
 import { useAuth } from "../auth";
+import { MarkdownMessage } from "../components/MarkdownMessage";
+import type { NotificationParseResult } from "../types";
 
 type ToolResult = { tool: string; status: string; title: string; data: unknown };
 type Source = { title?: string; url?: string; publisher?: string; published_at?: string | null; verified_at?: string | null; source_type?: string };
@@ -11,10 +13,18 @@ type Conversation = { id: string; title: string; updated_at: string };
 type ChatResponse = { conversation_id: string; message_id: string; intent: string; answer: string; tool_results: ToolResult[]; sources: Source[]; locations: Record<string, unknown>[]; route: Record<string, unknown> | null; map_action: MapAction | null; degraded: boolean; error_id: string | null; data_status: string };
 type AgentStatus = { backend: string; llm_configured: boolean; model: string; database: string };
 
+const QUICK_ACTIONS = [
+  ["解析通知", "请帮我解析下面这份通知，并生成可确认的任务：\n"],
+  ["找地点", "清远校区北区教学楼在哪里？"],
+  ["查饭堂", "清远校区有哪些饭堂？请区分北饭、南饭和西饭的核验状态。"],
+  ["设提醒", "明天下午3点提醒我"],
+  ["记便签", "把刚才的要求记一下"],
+] as const;
+
 const welcome = (): ChatMessage => ({
   id: "welcome",
   role: "assistant",
-  content: "你好，我是广金大师兄。模型连接正常后，你可以在这里进行多轮对话。",
+  content: "你好，我是广金大师兄。你可以直接问学习问题、查清远校区地点，也可以把通知贴过来转成任务和提醒。",
 });
 
 export default function ChatPage() {
@@ -27,122 +37,187 @@ export default function ChatPage() {
   const [error, setError] = useState("");
   const [failedMessage, setFailedMessage] = useState("");
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
-  const [statusError, setStatusError] = useState("");
+  const [stage, setStage] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [attachment, setAttachment] = useState<File | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const loadConversations = async () => {
     try { setConversations(await api<Conversation[]>("/agent/conversations")); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "对话历史加载失败"); }
   };
   const loadAgentStatus = async () => {
-    setStatusError("");
     try { setAgentStatus(await api<AgentStatus>("/agent/status")); }
-    catch (reason) {
-      setAgentStatus(null);
-      setStatusError(reason instanceof Error ? reason.message : "无法读取大模型状态");
-    }
+    catch { setAgentStatus(null); }
   };
   useEffect(() => { void loadConversations(); void loadAgentStatus(); }, []);
-  useEffect(() => { if (typeof endRef.current?.scrollIntoView === "function") endRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, busy]);
+  useEffect(() => { endRef.current?.scrollIntoView?.({ behavior: "smooth" }); }, [messages, stage]);
+  useEffect(() => {
+    const field = textareaRef.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, 180)}px`;
+  }, [input]);
 
   const newConversation = () => {
-    setConversationId(null);
-    setMessages([welcome()]);
-    setInput("");
-    setError("");
-    setFailedMessage("");
+    abortRef.current?.abort();
+    setConversationId(null); setMessages([welcome()]); setInput(""); setError(""); setAttachment(null); setDrawerOpen(false);
   };
   const openConversation = async (id: string) => {
     setError("");
     try {
       const result = await api<{ messages: ChatMessage[] }>(`/agent/conversations/${id}`);
-      setConversationId(id);
-      setMessages(result.messages.length ? result.messages : [welcome()]);
+      setConversationId(id); setMessages(result.messages.length ? result.messages : [welcome()]); setDrawerOpen(false);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "对话加载失败"); }
   };
   const removeConversation = async (id: string) => {
     if (!window.confirm("确定删除这段对话历史吗？")) return;
-    setError("");
-    try {
-      await api(`/agent/conversations/${id}`, { method: "DELETE" });
-      if (conversationId === id) newConversation();
-      await loadConversations();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "删除对话失败"); }
+    try { await api(`/agent/conversations/${id}`, { method: "DELETE" }); if (conversationId === id) newConversation(); await loadConversations(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "删除对话失败"); }
+  };
+
+  const sendAttachment = async (file: File, text: string) => {
+    const form = new FormData();
+    form.append("file", file); if (text) form.append("text", text);
+    const result = await api<NotificationParseResult>("/notifications/parse", { method: "POST", body: form, timeoutMs: 75000 });
+    setMessages((current) => [...current, {
+      id: `parsed-${Date.now()}`,
+      role: "assistant",
+      content: `已从 **${file.name}** 提取通知内容。请核对下面的任务，再决定是否保存。`,
+      tool_results: [{ tool: "notification_parser", status: "success", title: "通知任务预览", data: result }],
+    }]);
   };
 
   const send = async (content: string, appendUser = true) => {
-    if (!content.trim() || busy) return;
-    if (!agentStatus?.llm_configured) {
-      setError("后端已连接，但尚未配置大模型密钥。");
+    if ((!content.trim() && !attachment) || busy) return;
+    if (!agentStatus?.llm_configured && !attachment) { setError("后端已连接，但尚未配置大模型密钥。"); return; }
+    const file = attachment;
+    setError(""); setFailedMessage(""); setBusy(true); setStage(file ? "正在提取附件内容" : "正在连接大师兄");
+    const localUserId = `local-${Date.now()}`;
+    if (appendUser) setMessages((current) => [...current, { id: localUserId, role: "user", content: content || `附件：${file?.name}` }]);
+    setAttachment(null);
+    if (file) {
+      try { await sendAttachment(file, content); }
+      catch (reason) { setError(reason instanceof Error ? reason.message : "附件解析失败"); setFailedMessage(content); }
+      finally { setBusy(false); setStage(""); }
       return;
     }
-    setError(""); setFailedMessage(""); setBusy(true);
-    if (appendUser) setMessages((current) => [...current, { id: `local-${Date.now()}`, role: "user", content }]);
+
+    const streamingId = `stream-${Date.now()}`;
+    setMessages((current) => [...current, { id: streamingId, role: "assistant", content: "" }]);
+    const controller = new AbortController(); abortRef.current = controller;
     try {
-      const result = await api<ChatResponse>("/agent/chat", {
-        method: "POST",
-        body: JSON.stringify({ message: content, conversation_id: conversationId, campus_id: user?.campus_id }),
-        timeoutMs: 75000,
-      });
-      setConversationId(result.conversation_id);
-      setMessages((current) => [...current, {
-        id: result.message_id,
-        role: "assistant",
-        content: result.answer,
-        intent: result.intent,
-        tool_results: result.tool_results,
-        sources: result.sources,
-        map_action: result.map_action,
-        degraded: result.degraded,
-        error_id: result.error_id,
-        data_status: result.data_status,
-      }]);
+      await streamAgentChat(
+        { message: content, conversation_id: conversationId, campus_id: user?.campus_id },
+        ({ event, data }) => {
+          if (event === "stage") setStage(String(data.label || "正在处理"));
+          if (event === "token") setMessages((current) => current.map((item) => item.id === streamingId ? { ...item, content: item.content + String(data.content || "") } : item));
+          if (event === "final") {
+            const result = data as unknown as ChatResponse;
+            setConversationId(result.conversation_id);
+            setMessages((current) => current.map((item) => item.id === streamingId ? {
+              id: result.message_id, role: "assistant", content: result.answer, intent: result.intent,
+              tool_results: result.tool_results, sources: result.sources, map_action: result.map_action,
+              degraded: result.degraded, error_id: result.error_id, data_status: result.data_status,
+            } : item));
+          }
+        },
+        controller.signal,
+      );
       await loadConversations();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "消息发送失败");
-      setFailedMessage(content);
-    } finally { setBusy(false); }
-  };
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    const content = input.trim();
-    if (!content) return;
-    if (!agentStatus?.llm_configured) {
-      setError("后端已连接，但尚未配置大模型密钥。");
-      return;
-    }
-    setInput("");
-    void send(content);
+      if (reason instanceof DOMException && reason.name === "AbortError") {
+        setMessages((current) => current.map((item) => item.id === streamingId && !item.content ? { ...item, content: "已停止生成。" } : item));
+      } else {
+        setMessages((current) => current.filter((item) => item.id !== streamingId || Boolean(item.content)));
+        setError(reason instanceof Error ? reason.message : "消息发送失败"); setFailedMessage(content);
+      }
+    } finally { abortRef.current = null; setBusy(false); setStage(""); }
   };
 
+  const submit = (event: FormEvent) => {
+    event.preventDefault(); const content = input.trim(); if (!content && !attachment) return;
+    setInput(""); void send(content);
+  };
+  const handleKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
+  };
+  const chooseFile = (file?: File) => {
+    if (!file) return;
+    if (!/\.(txt|pdf)$/i.test(file.name)) { setError("仅支持 TXT 和 PDF 文件"); return; }
+    if (file.size > 5 * 1024 * 1024) { setError("文件不得超过 5 MB"); return; }
+    setAttachment(file); setError("");
+  };
+  const drop = (event: DragEvent) => { event.preventDefault(); chooseFile(event.dataTransfer.files[0]); };
+  const lastUserMessage = [...messages].reverse().find((item) => item.role === "user" && !item.id.startsWith("local-attachment"));
+
   return (
-    <section className="chat-page section-wrap">
-      <aside className="conversation-sidebar">
-        <div className="panel-heading"><h2>对话历史</h2><button className="icon-button" aria-label="新建对话" onClick={newConversation}>＋</button></div>
+    <section className="chat-page">
+      {drawerOpen && <button className="chat-drawer-backdrop" aria-label="关闭对话历史" onClick={() => setDrawerOpen(false)} />}
+      <aside className={`conversation-sidebar ${drawerOpen ? "open" : ""}`} aria-label="对话历史">
+        <div className="panel-heading"><h2>对话</h2><button className="icon-button" aria-label="新建对话" onClick={newConversation}>＋</button></div>
         {conversations.map((item) => <div className={`conversation-row ${conversationId === item.id ? "active" : ""}`} key={item.id}><button onClick={() => void openConversation(item.id)}><strong>{item.title}</strong><small>{new Date(item.updated_at).toLocaleDateString("zh-CN")}</small></button><button aria-label={`删除对话 ${item.title}`} className="danger-link" onClick={() => void removeConversation(item.id)}>×</button></div>)}
-        {!conversations.length && <p>还没有保存的对话</p>}
+        {!conversations.length && <p className="empty-copy">还没有对话</p>}
       </aside>
+
       <div className="chat-main">
-        <header><p className="eyebrow">AI 对话</p><h1>问问大师兄</h1><p>回答由后端连接的真实大模型生成，多轮上下文保存在你的对话记录中。</p></header>
-        {agentStatus && !agentStatus.llm_configured && <div className="degraded-note" role="status">后端已连接，但尚未配置大模型密钥。<button className="text-link" onClick={() => void loadAgentStatus()}>重新检查</button></div>}
-        {agentStatus?.llm_configured && <div className="degraded-note" role="status">大模型已连接：{agentStatus.model}</div>}
-        {statusError && <div className="error-banner" role="alert">模型状态检查失败：{statusError}<button className="ghost-button compact" onClick={() => void loadAgentStatus()}>重新检查</button></div>}
+        <header className="chat-topbar">
+          <button className="history-trigger" onClick={() => setDrawerOpen(true)} aria-label="打开对话历史">☰</button>
+          <div><h1>问问大师兄</h1><span> · {user?.campus_id ? "当前校区" : "校区未设置"}</span></div>
+          <span className={`connection-dot ${agentStatus?.llm_configured ? "online" : ""}`} title={agentStatus?.llm_configured ? "大模型已连接" : "模型未配置"} />
+        </header>
+
+        {!agentStatus?.llm_configured && agentStatus && <div className="model-warning" role="status">后端已连接，但尚未配置大模型密钥。<button onClick={() => void loadAgentStatus()}>重新检查</button></div>}
         <div className="message-list" aria-live="polite">
-          {messages.map((message) => <article className={`message ${message.role}`} key={message.id}><div className="message-avatar">{message.role === "assistant" ? "广" : (user?.nickname || "我").slice(0, 1)}</div><div className="message-body"><p>{message.content}</p>{message.intent && <small className="intent-label">意图：{message.intent}</small>}{message.degraded && <div className="degraded-note">基础模式：当前未使用可用的大模型回答。数据库查询仍然真实可用，请核对不确定日期。{message.error_id ? ` 错误编号：${message.error_id}` : ""}</div>}{message.data_status === "needs_verification" && <div className="date-warning">结果包含历史或待核验数据，请查看来源与日期。</div>}{message.tool_results?.map((tool, index) => <ToolCard tool={tool} key={`${message.id}-${index}`} />)}{message.map_action && <Link className="button compact" to={message.map_action.url}>{message.map_action.type === "route" ? "在地图中查看路线" : "在地图中查看"}</Link>}{message.sources && message.sources.length > 0 && <div className="chat-sources"><strong>来源</strong>{message.sources.map((source, index) => <a href={source.url || undefined} target="_blank" rel="noreferrer" key={`${source.url}-${index}`}><span>{source.title || "来源"}</span><small>{source.publisher || "发布方未注明"}{source.published_at ? ` · 发布 ${new Date(source.published_at).toLocaleDateString("zh-CN")}` : ""}{source.verified_at ? ` · 核验 ${new Date(source.verified_at).toLocaleDateString("zh-CN")}` : ""}</small></a>)}</div>}</div></article>)}
-          {busy && <article className="message assistant"><div className="message-avatar">广</div><div className="message-body typing">正在等待大模型回答…</div></article>}
+          {messages.map((message) => <MessageView key={message.id} message={message} userInitial={(user?.nickname || "我").slice(0, 1)} />)}
+          {busy && stage && <div className="agent-progress" role="status"><span /><span /><span />{stage}</div>}
           <div ref={endRef} />
         </div>
-        {error && <div className="error-banner" role="alert">{error}{failedMessage && <button className="ghost-button compact" onClick={() => void send(failedMessage, false)}>重新发送</button>}</div>}
-        <form className="chat-composer" onSubmit={submit}><textarea aria-label="消息" rows={2} value={input} onChange={(event) => setInput(event.target.value)} placeholder="例如：你好，你能做什么？" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="button" disabled={busy || !input.trim() || !agentStatus?.llm_configured}>发送</button><small>Enter 发送 · Shift + Enter 换行</small></form>
+
+        {messages.length <= 1 && <div className="chat-quick-actions" aria-label="快捷操作">{QUICK_ACTIONS.map(([label, value]) => <button key={label} onClick={() => { setInput(value); textareaRef.current?.focus(); }}>{label}</button>)}</div>}
+        {error && <div className="chat-error" role="alert"><span>{error}</span>{failedMessage && <button onClick={() => void send(failedMessage, false)}>重试</button>}</div>}
+        <form className="chat-composer" onSubmit={submit} onDragOver={(event) => event.preventDefault()} onDrop={drop}>
+          {attachment && <div className="attachment-chip"><span>{attachment.name}</span><button type="button" onClick={() => setAttachment(null)} aria-label="移除附件">×</button></div>}
+          <div className="composer-row">
+            <button type="button" className="composer-icon" title="添加 TXT 或 PDF" aria-label="添加附件" onClick={() => fileRef.current?.click()}>＋</button>
+            <input ref={fileRef} hidden type="file" accept=".txt,.pdf,text/plain,application/pdf" onChange={(event) => chooseFile(event.target.files?.[0])} />
+            <textarea ref={textareaRef} aria-label="消息" rows={1} value={input} onChange={(event) => setInput(event.target.value)} placeholder="发消息，或粘贴一份通知…" onKeyDown={handleKey} />
+            {busy ? <button type="button" className="stop-button" onClick={() => abortRef.current?.abort()}>停止</button> : <button className="send-button" aria-label="发送" disabled={(!input.trim() && !attachment) || (!agentStatus?.llm_configured && !attachment)}>↑</button>}
+          </div>
+          <div className="composer-meta"><span>Enter 发送 · Shift+Enter 换行 · 可拖入 TXT/PDF</span>{lastUserMessage && !busy && <button type="button" onClick={() => void send(lastUserMessage.content, false)}>重新生成</button>}</div>
+        </form>
       </div>
     </section>
   );
 }
 
+function MessageView({ message, userInitial }: { message: ChatMessage; userInitial: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => { await navigator.clipboard?.writeText(message.content); setCopied(true); window.setTimeout(() => setCopied(false), 1200); };
+  return <article className={`message ${message.role}`}><div className="message-avatar">{message.role === "assistant" ? "广" : userInitial}</div><div className="message-column"><div className="message-body">{message.content ? <MarkdownMessage content={message.content} /> : <span className="typing-cursor" />}{message.data_status === "needs_verification" && <div className="data-caution">部分校园资料仍待核验，回答中已保留状态说明。</div>}{message.tool_results?.map((tool, index) => <ToolCard tool={tool} key={`${message.id}-${index}`} />)}{message.map_action && <Link className="inline-action" to={message.map_action.url}>{message.map_action.type === "route" ? "在地图中查看路线" : "在地图中查看"}</Link>}{message.sources && message.sources.length > 0 && <details className="execution-details"><summary>查看来源</summary>{message.sources.map((source, index) => <a href={source.url || undefined} target="_blank" rel="noreferrer" key={`${source.url}-${index}`}>{source.title || "来源"}{source.published_at ? ` · ${new Date(source.published_at).toLocaleDateString("zh-CN")}` : ""}</a>)}</details>}</div>{message.content && <button className="message-copy" onClick={() => void copy()}>{copied ? "已复制" : "复制"}</button>}</div></article>;
+}
+
 function ToolCard({ tool }: { tool: ToolResult }) {
-  const rows = Array.isArray(tool.data) ? tool.data : tool.data ? [tool.data] : [];
-  const locationTool = ["location_search", "nearby_location_search"].includes(tool.tool);
-  const hasId = (item: Record<string, unknown>) => Boolean(item.id);
-  const navigationUrl = !Array.isArray(tool.data) && tool.data && typeof tool.data === "object" ? String((tool.data as Record<string, unknown>).url || "") : "";
-  return <div className="tool-card"><div><span>工具结果 · {tool.status === "error" ? "未通过" : "已核验流程"}</span><strong>{tool.title}</strong></div>{tool.status === "error" && <p className="date-warning">工具没有返回可用结果，AI 不会据此生成校园事实。</p>}{rows.length ? <div className="tool-items">{rows.slice(0, 8).map((row, index) => { const item = row as Record<string, unknown>; const nested = Array.isArray(item.stalls) ? item.stalls as Record<string, unknown>[] : []; return <div key={String(item.id || index)}><strong>{String(item.name || item.title || item.canteen || `结果 ${index + 1}`)}</strong><small>{String(item.area || item.address || item.deadline || item.verification_status || "")}</small>{Boolean(item.distance_note) && <p>{String(item.distance_note)}</p>}{nested.length > 0 && <p>记录：{nested.map((stall) => String(stall.name || stall.food_type)).join("、")}</p>}{locationTool && hasId(item) && <Link className="text-link" to={`/map?location=${encodeURIComponent(String(item.id))}`}>在地图页查看</Link>}</div>; })}</div> : <p>没有匹配的结构化记录。</p>}{tool.tool === "navigation_link" && navigationUrl && <a className="button compact" href={navigationUrl} target="_blank" rel="noreferrer">开始导航</a>}{tool.tool === "notification_parser" && <Link className="ghost-button compact" to="/notifications">打开可编辑通知预览</Link>}{tool.tool === "calendar_download" && <Link className="ghost-button compact" to="/tasks">前往任务中心确认导出</Link>}</div>;
+  const [status, setStatus] = useState("");
+  const [working, setWorking] = useState(false);
+  const data = tool.data as Record<string, unknown> | null;
+  const rows = Array.isArray(tool.data) ? tool.data as Record<string, unknown>[] : [];
+  const saveReminder = async () => {
+    if (!data?.remind_at || !window.confirm(`确认在 ${new Date(String(data.remind_at)).toLocaleString("zh-CN")} 提醒？`)) return;
+    setWorking(true); try { await api("/reminders", { method: "POST", body: JSON.stringify({ ...data, confirmed: true }) }); setStatus("提醒已保存"); } catch (reason) { setStatus(reason instanceof Error ? reason.message : "保存失败"); } finally { setWorking(false); }
+  };
+  const saveNote = async () => {
+    if (!window.confirm("确认保存这条便签？")) return;
+    setWorking(true); try { await api("/notes", { method: "POST", body: JSON.stringify({ ...data, confirmed: true }) }); setStatus("便签已保存"); } catch (reason) { setStatus(reason instanceof Error ? reason.message : "保存失败"); } finally { setWorking(false); }
+  };
+  const saveNotificationTasks = async () => {
+    const parsed = data as unknown as NotificationParseResult;
+    if (!parsed?.action_items?.length || !window.confirm(`确认保存 ${parsed.action_items.length} 个任务，并添加24小时和3小时提醒？`)) return;
+    setWorking(true); try { await api("/notifications/confirm", { method: "POST", body: JSON.stringify({ action_items: parsed.action_items, confirmed: true, allow_expired: false }) }); setStatus("任务与提醒已保存"); } catch (reason) { setStatus(reason instanceof Error ? reason.message : "保存失败"); } finally { setWorking(false); }
+  };
+  const summaries = rows.slice(0, 4).map((row) => String(row.name || row.title || row.subject || "结果"));
+  return <div className={`tool-card natural ${tool.status === "error" ? "failed" : ""}`}><div className="tool-summary"><span>{tool.status === "error" ? "!" : "✓"}</span><strong>{tool.status === "error" ? `${tool.title}未完成` : `${tool.title}已完成`}</strong></div>{summaries.length > 0 && <p>{summaries.join("、")}{rows.length > 4 ? ` 等 ${rows.length} 条` : ""}</p>}{tool.tool === "reminder_preview" && <button disabled={working || !data?.remind_at} onClick={() => void saveReminder()}>{data?.remind_at ? "确认保存提醒" : "未识别到时间"}</button>}{tool.tool === "note_preview" && <button disabled={working} onClick={() => void saveNote()}>确认保存便签</button>}{tool.tool === "notification_parser" && <button disabled={working} onClick={() => void saveNotificationTasks()}>保存任务并设置提醒</button>}{tool.tool === "calendar_download" && <Link to="/tasks">前往任务中心导出日历</Link>}{status && <small role="status">{status}</small>}<details className="execution-details"><summary>查看执行详情</summary><pre>{JSON.stringify(tool.data, null, 2)}</pre></details></div>;
 }

@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { campus, json, renderAt, routeFetch, user } from "./test/test-utils";
 
+const sse = (...frames: [string, unknown][]) => new Response(frames.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join(""), { headers: { "content-type": "text/event-stream" } });
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("public and route guards", () => {
@@ -88,19 +90,19 @@ describe("campus workflows", () => {
       "/api/auth/me": user,
       "/api/agent/conversations": [],
       "/api/agent/status": { backend: "ok", llm_configured: true, model: "deepseek-v4-flash", database: "ok" },
-      "/api/agent/chat": {
+      "/api/agent/chat/stream": () => sse(["stage", { stage: "respond", label: "正在生成回答" }], ["token", { content: "图书馆位于东区。" }], ["final", {
         conversation_id: "conversation-1", message_id: "message-1", intent: "campus_location_search",
         answer: "图书馆位于东区。", degraded: false, data_status: "verified",
         tool_results: [{ tool: "location_search", status: "success", title: "校园地点", data: [{ id: "lib", name: "图书馆", area: "东区" }] }],
         sources: [{ title: "校方地点说明", url: "https://example.edu", publisher: "广东金融学院" }],
-      },
+      }]),
     }));
     renderAt("/chat", <App />);
-    expect(await screen.findByText("大模型已连接：deepseek-v4-flash")).toBeInTheDocument();
+    expect(await screen.findByTitle("大模型已连接")).toBeInTheDocument();
     await userEvent.type(await screen.findByLabelText("消息"), "图书馆在哪里？");
     await userEvent.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByText("图书馆位于东区。")).toBeInTheDocument();
-    expect(screen.getByText("校园地点")).toBeInTheDocument();
+    expect(screen.getByText("校园地点已完成")).toBeInTheDocument();
     expect(screen.getByText("校方地点说明")).toBeInTheDocument();
   });
 
@@ -121,10 +123,10 @@ describe("campus workflows", () => {
       "/api/auth/me": user,
       "/api/agent/conversations": [],
       "/api/agent/status": { backend: "ok", llm_configured: true, model: "deepseek-v4-flash", database: "ok" },
-      "/api/agent/chat": () => json({ detail: "大模型响应超时，请稍后重试。错误编号：mock-error" }, 504),
+      "/api/agent/chat/stream": () => sse(["error", { message: "大模型响应超时，请稍后重试。", error_id: "mock-error", status: 504 }]),
     }));
     renderAt("/chat", <App />);
-    expect(await screen.findByText("大模型已连接：deepseek-v4-flash")).toBeInTheDocument();
+    expect(await screen.findByTitle("大模型已连接")).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("消息"), "你好");
     await userEvent.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("大模型响应超时");

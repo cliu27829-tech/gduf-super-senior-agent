@@ -80,10 +80,10 @@ def test_tool_execution_pipeline_is_remembered(client: TestClient, register_user
         assert rows
         assert rows[0].tool_name == "list_tasks"
         assert rows[0].verification["pipeline"] == [
-            "observe", "classify", "plan", "execute", "verify", "confirm", "remember", "respond",
+            "observe", "reason", "plan", "execute", "observe_tool", "replan", "verify", "respond",
         ]
         assert rows[0].verification["intent"] == "task_management"
-        assert rows[0].verification["plan"] == ["list_tasks"]
+        assert rows[0].verification["plan"][0]["tool"] == "list_tasks"
         assert rows[0].verification["tools_called"] == ["list_tasks"]
         assert rows[0].verification["tool_success"] == {"list_tasks": True}
 
@@ -169,10 +169,15 @@ def test_agent_core_intents_expose_plan_and_tool_outcomes(client: TestClient, re
         ("大一高数跟不上怎么办？", "learning_guidance", [], []),
         ("快递站在哪里？", "campus_location_search", ["search_campus_locations"], ["search_campus_locations"]),
         ("饭堂有什么吃？", "food_search", ["search_food"], ["search_food"]),
-        ("这是通知：请提交课程报告", "notification_to_tasks", ["extract_tasks_from_notification", "validate_extracted_tasks"], ["extract_tasks_from_notification"]),
+        ("这是通知：请提交课程报告", "notification_to_tasks", ["extract_tasks_from_notification", "validate_extracted_tasks"], ["extract_tasks_from_notification", "validate_extracted_tasks"]),
         ("我的任务有哪些？", "task_management", ["list_tasks"], ["list_tasks"]),
         ("校园网故障怎么报修？", "campus_process", ["search_campus_processes"], ["search_campus_processes"]),
-        ("从北教去北苑饭堂怎么走？", "campus_navigation", ["search_campus_locations", "calculate_walking_route"], ["search_campus_locations", "calculate_walking_route"]),
+        (
+            "从北教去北苑饭堂怎么走？",
+            "campus_navigation",
+            ["search_campus_locations", "list_canteens", "calculate_walking_route"],
+            ["search_campus_locations", "list_canteens", "calculate_walking_route"],
+        ),
     ]
     for message, intent, plan, tools in cases:
         response = client.post("/api/agent/chat", json={"message": message, "campus_id": campus_id})

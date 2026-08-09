@@ -130,3 +130,32 @@ class ProcessWrite(BaseModel):
     is_active: bool = True
     evidence: str = ""
     verification_note: str = ""
+
+
+class FactResearchRequest(BaseModel):
+    url: str = Field(min_length=10, max_length=1000)
+    campus_id: str
+
+
+class FactCandidate(BaseModel):
+    subject: str = Field(min_length=1, max_length=180)
+    predicate: str = Field(min_length=1, max_length=120)
+    object: str = Field(min_length=1, max_length=5000)
+    aliases: list[str] = Field(default_factory=list, max_length=30)
+    source_url: str = Field(max_length=1000)
+    source_title: str = Field(max_length=255)
+    source_type: str = Field(default="official_page", max_length=60)
+    published_at: datetime | None = None
+    verified: bool = False
+
+
+class FactResearchResponse(BaseModel):
+    source_title: str
+    source_url: str
+    candidates: list[FactCandidate]
+
+
+class FactConfirmRequest(BaseModel):
+    campus_id: str
+    candidates: list[FactCandidate] = Field(min_length=1, max_length=100)
+    confirmed: bool = False

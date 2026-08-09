@@ -137,7 +137,7 @@ def test_agent_llm_planner_and_answer_use_mocked_model(client: TestClient, regis
     assert response.status_code == 200
     assert response.json()["degraded"] is False
     assert "Mock LLM" in response.json()["answer"]
-    assert len(mock_llm.calls) == 2
+    assert len(mock_llm.calls) == 3
     system_prompt = mock_llm.calls[-1][0]["content"]
     assert "本轮没有后端工具内容" in system_prompt
     assert "课程指定教材" in system_prompt

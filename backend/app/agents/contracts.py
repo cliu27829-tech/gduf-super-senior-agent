@@ -13,13 +13,23 @@ class IntentDecision(BaseModel):
     tool_plan: list[str] = Field(default_factory=list)
 
 
+class AgentPlanStep(BaseModel):
+    tool: str
+    purpose: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentPlan(BaseModel):
     intent: str
-    tool_names: list[str] = Field(default_factory=list)
+    goal: str
+    steps: list[AgentPlanStep] = Field(default_factory=list, max_length=4)
+    required_tools: list[str] = Field(default_factory=list, max_length=4)
     requires_knowledge: bool = False
     requires_confirmation: bool = False
     missing_information: list[str] = Field(default_factory=list)
+    risk_level: str = "low"
     risks: list[str] = Field(default_factory=list)
+    agent_round: int = Field(default=1, ge=1, le=4)
 
 
 class Observation(BaseModel):

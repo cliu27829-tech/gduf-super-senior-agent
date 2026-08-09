@@ -44,24 +44,27 @@ test("registers and completes the three real MVP workflows", async ({ page, requ
   await expect(page.getByRole("heading", { name: /端到端同学，今天先做哪一件/ })).toBeVisible();
   await page.getByRole("link", { name: "问师兄" }).first().click();
   await expect(page.getByRole("heading", { name: "问问大师兄" })).toBeVisible();
-  await expect(page.getByText("大模型已连接：deepseek-v4-flash")).toBeVisible();
+  await expect(page.locator(".connection-dot.online")).toBeVisible();
   await expect(page.locator(".message.assistant")).toHaveCount(1);
 
   const send = async (message: string) => {
-    const completedAnswers = page.locator(".message.assistant").filter({ hasNot: page.locator(".typing") });
-    const assistantCount = await completedAnswers.count();
+    const answers = page.locator(".message.assistant");
+    const assistantCount = await answers.count();
     await page.getByLabel("消息").fill(message);
     await page.getByRole("button", { name: "发送" }).click();
-    await expect(completedAnswers).toHaveCount(assistantCount + 1);
-    return completedAnswers.last();
+    await expect(answers).toHaveCount(assistantCount + 1);
+    const answer = answers.last();
+    await expect(answer.locator(".markdown-message")).toBeVisible({ timeout: 90_000 });
+    await expect(answer.locator(".typing-cursor")).toHaveCount(0);
+    await expect(page.locator(".stop-button")).toHaveCount(0);
+    return answer;
   };
 
   const greeting = await send("你好，你能做什么？");
-  await expect(greeting).toContainText("广金大师兄");
   await expect(greeting).not.toContainText("基础模式");
+  expect((await greeting.innerText()).length).toBeGreaterThan(30);
 
   const guidance = await send("大一高数跟不上怎么办？");
-  await expect(guidance).toContainText("意图：learning_guidance");
   expect((await guidance.innerText()).length).toBeGreaterThan(30);
 
   await send("我叫小明，请记住。");
@@ -72,7 +75,7 @@ test("registers and completes the three real MVP workflows", async ({ page, requ
   await expect(food).toContainText(/历史|待核验|不代表现在|不提供可靠实时菜单/);
   await expect(food).not.toContainText(/这是今天的菜单|当日实时菜单/);
   await expect(food.getByText("饭堂与档口")).toBeVisible();
-  await expect(food.getByText("来源", { exact: true })).toBeVisible();
+  await expect(food.getByText("查看来源", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "校园地图" }).first().click();
   await expect(

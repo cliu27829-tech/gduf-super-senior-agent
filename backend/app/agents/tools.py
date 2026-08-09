@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.agents.contracts import ToolResponse
 from app.core.config import get_settings
 from app.models.entities import (
-    CampusProcess, Canteen, FoodStall, KnowledgeDocument, Location, Source, Task, TaskReminder, User, UserPreference, utcnow,
+    CampusCollege, CampusFact, CampusPathEdge, CampusPathNode, CampusProcess, Canteen, FoodStall,
+    KnowledgeDocument, Location, Note, Reminder, Source, Task, TaskReminder, User, UserPreference, utcnow,
 )
 from app.services.ics_service import generate_ics
 from app.services.map_service import MapService, MapServiceError
@@ -73,6 +74,107 @@ class AgentToolbox:
 
     def _owned_task(self, task_id: str) -> Task | None:
         return self.db.scalar(select(Task).where(Task.id == task_id, Task.user_id == self.user.id))
+
+    def search_campus_facts(self, query: str = "", **_: Any) -> ToolResponse:
+        statement = select(CampusFact).where(CampusFact.verified.is_(True))
+        if self.campus_id:
+            statement = statement.where(CampusFact.campus_id == self.campus_id)
+        rows = list(self.db.scalars(statement))
+        normalized = re.sub(r"\s+", "", query.lower())
+        if normalized:
+            ranked = []
+            for row in rows:
+                searchable = re.sub(r"\s+", "", " ".join([row.subject, row.predicate, row.object, *row.aliases]).lower())
+                score = sum(len(token) for token in re.findall(r"[\u4e00-\u9fff]{2,8}|[a-z0-9]{2,}", normalized) if token in searchable)
+                if score or any(alias and alias in normalized for alias in row.aliases):
+                    ranked.append((score, row))
+            rows = [row for _, row in sorted(ranked, key=lambda item: -item[0])]
+        data = [{
+            "id": row.id, "subject": row.subject, "predicate": row.predicate, "object": row.object,
+            "aliases": row.aliases, "source_url": row.source_url, "source_title": row.source_title,
+            "published_at": row.published_at, "verification_status": row.verification_status,
+        } for row in rows[:20]]
+        sources = [{"title": row.source_title, "url": row.source_url, "published_at": row.published_at, "is_official": row.source_type.startswith("official")} for row in rows[:20] if row.source_url]
+        return self._ok("search_campus_facts", data, f"找到 {len(data)} 条已核验校园事实", sources=sources, verification={"structured_facts": True})
+
+    def search_express_locations(self, **_: Any) -> ToolResponse:
+        result = self.search_campus_locations(category="express_station")
+        result.tool_name = "search_express_locations"
+        result.summary = f"找到 {len(result.data or [])} 个快递服务地点；具体运营商和开放时间只使用已核验字段"
+        return result
+
+    def list_campus_colleges(self, education_mode: str = "", **_: Any) -> ToolResponse:
+        statement = select(CampusCollege).where(CampusCollege.verified.is_(True))
+        if self.campus_id:
+            statement = statement.where(CampusCollege.campus_id == self.campus_id)
+        if education_mode:
+            statement = statement.where(CampusCollege.education_mode == education_mode)
+        rows = list(self.db.scalars(statement.order_by(CampusCollege.education_mode, CampusCollege.name)))
+        data = [{
+            "id": row.id, "name": row.name, "education_mode": row.education_mode, "grades": row.grades,
+            "source_url": row.source_url, "source_title": row.source_title,
+            "source_published_at": row.source_published_at, "verified": row.verified, "note": row.note,
+        } for row in rows]
+        modes: dict[str, int] = {}
+        for row in rows:
+            modes[row.education_mode] = modes.get(row.education_mode, 0) + 1
+        return self._ok(
+            "list_campus_colleges", data,
+            "学院数量必须按办学模式说明；13仅指2+2学院，不等于清远全部教学组织。",
+            sources=[{"title": row.source_title, "url": row.source_url, "published_at": row.source_published_at, "is_official": True} for row in rows[:1]],
+            verification={"counts_by_mode": modes, "scope_warning": True},
+        )
+
+    def preview_reminder(self, text: str = "", **_: Any) -> ToolResponse:
+        inferred = parse_relative_datetime(text)
+        data = {
+            "title": re.sub(r".*提醒我", "", text).strip(" ，,。")[:180] or "新提醒",
+            "body": text,
+            "remind_at": inferred.value,
+            "timezone": "Asia/Shanghai",
+            "explanation": inferred.explanation,
+            "confirmed": False,
+        }
+        return self._confirmation("preview_reminder", "已生成提醒预览，保存前需要你确认", data)
+
+    def list_reminders(self, status: str | None = None, **_: Any) -> ToolResponse:
+        statement = select(Reminder).where(Reminder.user_id == self.user.id)
+        if status:
+            statement = statement.where(Reminder.status == status)
+        rows = list(self.db.scalars(statement.order_by(Reminder.remind_at).limit(50)))
+        data = [{"id": row.id, "title": row.title, "body": row.body, "remind_at": row.remind_at, "status": row.status, "channels": row.channels} for row in rows]
+        return self._ok("list_reminders", data, f"找到 {len(data)} 条提醒")
+
+    def preview_note(self, text: str = "", source_message_id: str | None = None, **_: Any) -> ToolResponse:
+        content = re.sub(r"(?:请)?(?:把)?(?:刚才的)?", "", text, count=1)
+        content = re.sub(r"(?:记一下|记下来|保存为便签)[。！!]?$", "", content).strip() or text
+        data = {"title": content.splitlines()[0][:60], "content": content, "tags": [], "source_message_id": source_message_id, "confirmed": False}
+        return self._confirmation("preview_note", "已生成便签预览，保存前需要你确认", data)
+
+    def list_notes(self, query: str = "", **_: Any) -> ToolResponse:
+        statement = select(Note).where(Note.user_id == self.user.id)
+        if query:
+            pattern = f"%{query}%"
+            statement = statement.where(or_(Note.title.ilike(pattern), Note.content.ilike(pattern)))
+        rows = list(self.db.scalars(statement.order_by(Note.pinned.desc(), Note.updated_at.desc()).limit(50)))
+        data = [{"id": row.id, "title": row.title, "content": row.content, "tags": row.tags, "pinned": row.pinned, "updated_at": row.updated_at} for row in rows]
+        return self._ok("list_notes", data, f"找到 {len(data)} 条便签")
+
+    def get_daily_summary(self, **_: Any) -> ToolResponse:
+        now = now_china()
+        end = now + timedelta(days=7)
+        tasks = list(self.db.scalars(select(Task).where(
+            Task.user_id == self.user.id, Task.status == "pending",
+            Task.deadline.is_not(None), Task.deadline <= end,
+        ).order_by(Task.deadline)))
+        reminders = list(self.db.scalars(select(Reminder).where(
+            Reminder.user_id == self.user.id, Reminder.status == "scheduled", Reminder.remind_at <= end,
+        ).order_by(Reminder.remind_at)))
+        data = {
+            "tasks": [_task_data(row) for row in tasks],
+            "reminders": [{"id": row.id, "title": row.title, "remind_at": row.remind_at, "status": row.status} for row in reminders],
+        }
+        return self._ok("get_daily_summary", data, f"未来7天有 {len(tasks)} 个任务和 {len(reminders)} 条提醒")
 
     def search_campus_locations(self, query: str = "", category: str | None = None, limit: int = 20, **_: Any) -> ToolResponse:
         statement = select(Location).options(selectinload(Location.sources)).where(
@@ -140,6 +242,47 @@ class AgentToolbox:
         destination = self.db.get(Location, destination_location_id)
         if not origin or not destination or origin.campus_id != self.campus_id or destination.campus_id != self.campus_id:
             return ToolResponse(tool_name="calculate_walking_route", success=False, error="not_found", summary="起点或终点不属于当前校区")
+        nodes = list(self.db.scalars(select(CampusPathNode).where(
+            CampusPathNode.campus_id == self.campus_id,
+            CampusPathNode.location_id.in_([origin.id, destination.id]),
+            CampusPathNode.verified.is_(True),
+        )))
+        node_by_location = {node.location_id: node for node in nodes}
+        if origin.id in node_by_location and destination.id in node_by_location:
+            edges = list(self.db.scalars(select(CampusPathEdge).where(
+                CampusPathEdge.campus_id == self.campus_id, CampusPathEdge.verified.is_(True)
+            )))
+            adjacency: dict[str, list[tuple[str, CampusPathEdge]]] = {}
+            for edge in edges:
+                adjacency.setdefault(edge.from_node_id, []).append((edge.to_node_id, edge))
+                if edge.bidirectional:
+                    adjacency.setdefault(edge.to_node_id, []).append((edge.from_node_id, edge))
+            start = node_by_location[origin.id].id
+            target = node_by_location[destination.id].id
+            queue: list[tuple[str, list[CampusPathEdge]]] = [(start, [])]
+            visited = {start}
+            found: list[CampusPathEdge] | None = None
+            while queue:
+                node_id, path = queue.pop(0)
+                if node_id == target:
+                    found = path
+                    break
+                for next_id, edge in adjacency.get(node_id, []):
+                    if next_id not in visited:
+                        visited.add(next_id)
+                        queue.append((next_id, [*path, edge]))
+            if found is not None:
+                data = {
+                    "provider": "verified_campus_path_graph",
+                    "origin_location_id": origin.id,
+                    "destination_location_id": destination.id,
+                    "distance_meters": sum(edge.distance_meters or 0 for edge in found) or None,
+                    "steps": [edge.instruction for edge in found if edge.instruction],
+                }
+                return self._ok(
+                    "calculate_walking_route", data, f"已用校内核验路径图计算从{origin.name}到{destination.name}的路线",
+                    verification={"provider": "campus_path_graph", "all_edges_verified": True},
+                )
         if None in (origin.longitude, origin.latitude, destination.longitude, destination.latitude) or any(
             row.coordinate_accuracy != "exact" or row.coordinate_verified_at is None for row in (origin, destination)
         ):
