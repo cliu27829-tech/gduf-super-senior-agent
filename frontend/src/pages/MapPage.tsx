@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { AmapCanvas } from "../components/AmapCanvas";
+import { AmapCanvas, type MapRoute, type MapRouteRequest } from "../components/AmapCanvas";
 import { EmptyState, Loading } from "../components/ProtectedRoute";
 import { formatDate, StatusBadge } from "../components/StatusBadge";
 import type { Campus, Location } from "../types";
@@ -28,7 +28,10 @@ export default function MapPage() {
   const [mapStatus, setMapStatus] = useState<{ provider: string; webservice_configured: boolean; security_proxy_configured: boolean } | null>(null);
   const [originId, setOriginId] = useState("");
   const [destinationId, setDestinationId] = useState("");
-  const [route, setRoute] = useState<{ provider: string; distance_meters: number; duration_seconds: number; steps: { instruction: string }[]; polyline: number[][] } | null>(null);
+  const [originAddress, setOriginAddress] = useState("");
+  const [destinationAddress, setDestinationAddress] = useState("");
+  const [route, setRoute] = useState<MapRoute | null>(null);
+  const [routeRequest, setRouteRequest] = useState<MapRouteRequest | null>(null);
   const [routeError, setRouteError] = useState("");
   const [routeBusy, setRouteBusy] = useState(false);
 
@@ -51,7 +54,10 @@ export default function MapPage() {
   const campus = campuses.find((item) => item.id === campusId);
   const routable = locations.filter((item) => item.latitude != null && item.longitude != null && item.verification_status !== "needs_verification");
   const jsKeyConfigured = Boolean(String(import.meta.env.VITE_AMAP_JS_KEY || "").trim());
-  const realMapEnabled = jsKeyConfigured && Boolean(mapStatus?.security_proxy_configured) && Boolean(mapStatus?.webservice_configured);
+  const realMapEnabled = jsKeyConfigured && Boolean(mapStatus?.security_proxy_configured);
+  useEffect(() => {
+    if (campus) setOriginAddress(`${campus.name} ${campus.address}`.trim());
+  }, [campus]);
   const navigationUrl = selected ? (selected.latitude != null && selected.longitude != null
     ? `https://uri.amap.com/navigation?to=${selected.longitude},${selected.latitude},${encodeURIComponent(selected.name)}&mode=walk&callnative=0`
     : `https://www.amap.com/search?query=${encodeURIComponent(`${campus?.name || ""} ${selected.address} ${selected.name}`)}`) : "";
@@ -74,20 +80,52 @@ export default function MapPage() {
       origin_longitude: String(origin.longitude), origin_latitude: String(origin.latitude),
       destination_longitude: String(destination.longitude), destination_latitude: String(destination.latitude),
     });
-    try { setRoute(await api(`/map/walking-route?${params.toString()}`)); }
+    try {
+      if (mapStatus?.webservice_configured) {
+        setRoute(await api(`/map/walking-route?${params.toString()}`));
+        setRouteBusy(false);
+      } else {
+        setRouteRequest({
+          id: Date.now(),
+          origin: [origin.longitude, origin.latitude],
+          destination: [destination.longitude, destination.latitude],
+        });
+      }
+    }
     catch (reason) { setRouteError(reason instanceof Error ? reason.message : "路线规划失败"); }
-    finally { setRouteBusy(false); }
+  };
+  const calculateAddressRoute = () => {
+    if (!originAddress.trim() || !destinationAddress.trim()) {
+      setRouteError("请填写完整的起点和终点地址");
+      return;
+    }
+    setRouteBusy(true); setRouteError(""); setRoute(null);
+    setRouteRequest({
+      id: Date.now(),
+      originAddress: originAddress.trim(),
+      destinationAddress: destinationAddress.trim(),
+    });
+  };
+  const routeCalculated = (result: MapRoute) => {
+    setRoute(result);
+    setRouteRequest(null);
+    setRouteBusy(false);
+  };
+  const jsRouteFailed = (detail: string) => {
+    setRouteError(detail);
+    setRouteRequest(null);
+    setRouteBusy(false);
   };
   return (
     <section className="page section-wrap map-page">
-      <div className="page-heading"><div><p className="eyebrow">校园地图</p><h1>先选校区，再找准确地点</h1><p>凭据齐全时加载高德真实道路底图；只有经过核验的 GPS 点位才能进入路线规划。</p></div><select aria-label="选择校区" value={campusId} onChange={(e) => setCampusId(e.target.value)}>{campuses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+      <div className="page-heading"><div><p className="eyebrow">校园地图</p><h1>先选校区，再找准确地点</h1><p>使用高德真实道路底图；校区中心由官方地址地理编码，其他地点只有经过核验的 GPS 点位才进入路线规划。</p></div><select aria-label="选择校区" value={campusId} onChange={(e) => setCampusId(e.target.value)}>{campuses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
       <div className="map-toolbar"><label className="search-box"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索教学楼、饭堂、快递…" /></label><div className="filter-chips">{categories.map(([value, label]) => <button key={value} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>{label}</button>)}</div></div>
       {error && <div className="error-banner" role="alert">{error}</div>}
       {campus && <div className="data-notice compact-notice"><strong>{campus.name}</strong><p>{campus.data_notice}</p></div>}
       {loading ? <Loading /> : <div className="map-layout">
         <div>
-          {campus && realMapEnabled ? <AmapCanvas campus={campus} locations={filtered} selected={selected} route={route} onSelect={setSelected} /> : <div className="map-config-panel" role="status"><p className="eyebrow">真实地图未启用</p><h2>需要配置高德地图凭据</h2><p>地点文字查询仍可使用；当前不会用示意图冒充真实道路地图。</p><ul><li>前端：<code>VITE_AMAP_JS_KEY</code>（Web 端 JS API Key）</li><li>后端：<code>AMAP_WEBSERVICE_KEY</code></li><li>后端：<code>AMAP_SECURITY_CODE</code>（只由安全代理读取）</li></ul></div>}
-          <div className="route-planner panel"><div className="panel-heading"><h2>步行路线</h2>{route && <span>{(route.distance_meters / 1000).toFixed(2)} km · 约 {Math.max(1, Math.round(route.duration_seconds / 60))} 分钟</span>}</div><div className="route-fields"><label>起点<select value={originId} onChange={(event) => setOriginId(event.target.value)}><option value="">选择有真实坐标的地点</option>{routable.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>终点<select value={destinationId} onChange={(event) => setDestinationId(event.target.value)}><option value="">选择有真实坐标的地点</option>{routable.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="button compact" type="button" disabled={!realMapEnabled || routeBusy || !originId || !destinationId} onClick={() => void calculateRoute()}>{routeBusy ? "规划中…" : "规划步行路线"}</button></div>{!routable.length && <small>当前校区尚无经过核验的 GPS 点位，因此不能生成真实路线。</small>}{routeError && <p className="date-warning" role="alert">{routeError}</p>}{route?.steps.length ? <details><summary>查看路线步骤</summary><ol>{route.steps.map((step, index) => <li key={`${index}-${step.instruction}`}>{step.instruction}</li>)}</ol></details> : null}</div>
+          {campus && realMapEnabled ? <AmapCanvas campus={campus} locations={filtered} selected={selected} route={route} routeRequest={routeRequest} onRouteCalculated={routeCalculated} onRouteError={jsRouteFailed} onSelect={setSelected} /> : <div className="map-config-panel" role="status"><p className="eyebrow">真实地图未启用</p><h2>需要配置高德地图凭据</h2><p>地点文字查询仍可使用；当前不会用示意图冒充真实道路地图。</p><ul><li>前端：<code>VITE_AMAP_JS_KEY</code>（Web 端 JS API Key）</li><li>后端：<code>AMAP_SECURITY_CODE</code>（只由安全代理读取）</li><li>可选增强：<code>AMAP_WEBSERVICE_KEY</code></li></ul></div>}
+        <div className="route-planner panel"><div className="panel-heading"><h2>步行路线</h2>{route && <span>{(route.distance_meters / 1000).toFixed(2)} km · 约 {Math.max(1, Math.round(route.duration_seconds / 60))} 分钟</span>}</div>{routable.length >= 2 ? <div className="route-fields"><label>起点<select value={originId} onChange={(event) => setOriginId(event.target.value)}><option value="">选择有真实坐标的地点</option>{routable.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>终点<select value={destinationId} onChange={(event) => setDestinationId(event.target.value)}><option value="">选择有真实坐标的地点</option>{routable.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="button compact" type="button" disabled={!realMapEnabled || routeBusy || !originId || !destinationId} onClick={() => void calculateRoute()}>{routeBusy ? "规划中…" : "规划步行路线"}</button></div> : <div className="route-fields route-address-fields"><label>起点地址<input aria-label="路线起点地址" value={originAddress} onChange={(event) => setOriginAddress(event.target.value)} /></label><label>终点地址<input aria-label="路线终点地址" value={destinationAddress} onChange={(event) => setDestinationAddress(event.target.value)} placeholder="输入城市和详细地址" /></label><button className="button compact" type="button" disabled={!realMapEnabled || routeBusy || !originAddress.trim() || !destinationAddress.trim()} onClick={calculateAddressRoute}>{routeBusy ? "规划中…" : "规划步行路线"}</button></div>}{!mapStatus?.webservice_configured && realMapEnabled && <small>后端 WebService 未配置，地址解析和路线将使用高德浏览器 JS API。</small>}{routable.length < 2 && <small>当前校区缺少两个核验 GPS 点位；可输入地址，由高德实时地理编码后规划，不会写入未核验坐标。</small>}{routeError && <p className="date-warning" role="alert">{routeError}</p>}{route?.steps.length ? <details><summary>查看路线步骤</summary><ol>{route.steps.map((step, index) => <li key={`${index}-${step.instruction}`}>{step.instruction}</li>)}</ol></details> : null}</div>
         </div>
         <aside className="location-list"><div className="panel-heading"><h2>地点列表</h2><span>{filtered.length} 条</span></div>{filtered.length ? filtered.map((item) => <button className={selected?.id === item.id ? "location-row active" : "location-row"} key={item.id} onClick={() => setSelected(item)}><span className={`category-icon category-${item.category}`}>{item.category === "canteen" ? "食" : "⌖"}</span><div><strong>{item.name}</strong><small>{item.area || item.address || "位置待核验"}</small></div><StatusBadge value={item.verification_status} /></button>) : <EmptyState title="没有匹配地点" detail="换个关键词或切换分类试试。" />}</aside>
       </div>}

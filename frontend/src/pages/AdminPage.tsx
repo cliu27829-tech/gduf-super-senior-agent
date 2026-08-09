@@ -60,6 +60,7 @@ export default function AdminPage() {
 function AdminContent({ section, data, campuses, reload, setNotice, setError }: { section: string; data: unknown; campuses: Campus[]; reload: () => Promise<unknown>; setNotice: (value: string) => void; setError: (value: string) => void }) {
   if (!section) return <Dashboard data={data as AdminRecord} />;
   if (section === "locations") return <LocationsAdmin rows={(data || []) as Location[]} campuses={campuses} reload={reload} setNotice={setNotice} setError={setError} />;
+  if (section === "knowledge") return <><KnowledgeReviewAdmin rows={(data || []) as AdminRecord[]} reload={reload} setNotice={setNotice} setError={setError} /><ManagedRecords section={section} rows={(data || []) as AdminRecord[]} campuses={campuses} reload={reload} setNotice={setNotice} setError={setError} /></>;
   if (section === "feedback") return <FeedbackAdmin rows={(data || []) as AdminRecord[]} reload={reload} setNotice={setNotice} />;
   if (section === "users") return <UsersAdmin rows={(data || []) as AdminRecord[]} reload={reload} />;
   if (section === "data") return <DataAdmin setNotice={setNotice} setError={setError} />;
@@ -67,6 +68,32 @@ function AdminContent({ section, data, campuses, reload, setNotice, setError }: 
   const rows = Array.isArray(data) ? data as AdminRecord[] : [];
   if (managedSections.has(section)) return <ManagedRecords section={section} rows={rows} campuses={campuses} reload={reload} setNotice={setNotice} setError={setError} />;
   return <GenericTable rows={rows} section={section} />;
+}
+
+function KnowledgeReviewAdmin({ rows, reload, setNotice, setError }: { rows: AdminRecord[]; reload: () => Promise<unknown>; setNotice: (value: string) => void; setError: (value: string) => void }) {
+  const allPrivateRows = rows.filter((row) => row.owner_user_id && row.visibility === "private");
+  const privateRows = allPrivateRows.slice(0, 50);
+  const review = async (row: AdminRecord, status: "approved" | "rejected") => {
+    const verificationMethod = window.prompt("核验方式（例如：对照公众号原文/学校官网）")?.trim();
+    if (!verificationMethod) return;
+    const fields = window.prompt("已核验字段，用逗号分隔", "title,content,published_at")?.split(",").map((item) => item.trim()).filter(Boolean) || [];
+    if (!fields.length) return;
+    const evidence = window.prompt(status === "approved" ? "核验证据（通过共享时必填）" : "拒绝依据（可选）")?.trim() || "";
+    if (status === "approved" && !evidence) return;
+    const note = window.prompt("审核备注")?.trim() || "";
+    if (!window.confirm(`二次确认：将“${String(row.title)}”标记为${status === "approved" ? "已审核并共享" : "拒绝且保持私有"}？`)) return;
+    try {
+      await api(`/knowledge/admin/sources/${String(row.id)}/review`, {
+        method: "PATCH",
+        body: JSON.stringify({ status, verification_method: verificationMethod, verified_fields: fields, evidence, note, confirmed: true }),
+      });
+      setNotice("知识资料审核已保存，核验记录和管理员审计日志均已写入");
+      await reload();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "审核失败");
+    }
+  };
+  return <div className="panel admin-form"><div className="panel-heading"><h2>好人师兄资料审核</h2><span>{allPrivateRows.length} 条私有待审线索{allPrivateRows.length > 50 ? "（首屏显示 50 条）" : ""}</span></div><p>机器提取内容默认私有。通过共享前必须填写核验方式、字段、证据、备注并二次确认；审核不会把历史资料自动标成最新。</p>{privateRows.length ? <div className="managed-records">{privateRows.map((row) => <div className="managed-row-actions" key={String(row.id)}><div><strong>{String(row.title)}</strong><small>{String(row.source_type)} · {String(row.review_status)}</small></div><button onClick={() => void review(row, "approved")}>核验并共享</button><button className="danger-link" onClick={() => void review(row, "rejected")}>拒绝</button></div>)}</div> : <p>没有私有待审资料。</p>}</div>;
 }
 
 function Dashboard({ data }: { data: AdminRecord }) {
@@ -123,7 +150,8 @@ function ManagedRecords({ section, rows, campuses, reload, setNotice, setError }
     try { await api(`/admin/${section}/${String(row.id)}`, { method: "DELETE" }); setNotice("操作已完成并写入审计日志"); await reload(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "操作失败"); }
   };
-  return <><div className="admin-actions"><button className="button" onClick={create}>＋ 新增记录</button><span>共 {rows.length} 条；高级字段使用结构化 JSON，保存前由后端再次校验。</span></div>{showEditor && <form className="panel admin-form" onSubmit={save}><div className="panel-heading"><h2>{editingId ? "编辑记录" : "新增记录"}</h2><button type="button" onClick={() => setShowEditor(false)}>取消</button></div><label>结构化数据<textarea className="json-editor" rows={18} value={payload} onChange={(event) => setPayload(event.target.value)} spellCheck={false} /></label><small>“已核验”记录必须同时填写 evidence；时间使用 ISO 8601 格式。</small><button className="button">校验并保存</button></form>}<div className="managed-records"><GenericTable rows={rows} section={section} />{rows.map((row) => <div className="managed-row-actions" key={String(row.id)}><strong>{String(row.name || row.title || row.slug || row.id)}</strong><button onClick={() => edit(row)}>编辑</button><button className="danger-link" onClick={() => void remove(row)}>停用/删除</button></div>)}</div></>;
+  const visibleRows = section === "knowledge" ? rows.slice(0, 50) : rows;
+  return <><div className="admin-actions"><button className="button" onClick={create}>＋ 新增记录</button><span>共 {rows.length} 条{visibleRows.length < rows.length ? `，首屏显示 ${visibleRows.length} 条` : ""}；高级字段使用结构化 JSON，保存前由后端再次校验。</span></div>{showEditor && <form className="panel admin-form" onSubmit={save}><div className="panel-heading"><h2>{editingId ? "编辑记录" : "新增记录"}</h2><button type="button" onClick={() => setShowEditor(false)}>取消</button></div><label>结构化数据<textarea className="json-editor" rows={18} value={payload} onChange={(event) => setPayload(event.target.value)} spellCheck={false} /></label><small>“已核验”记录必须同时填写 evidence；时间使用 ISO 8601 格式。</small><button className="button">校验并保存</button></form>}<div className="managed-records"><GenericTable rows={visibleRows} section={section} />{visibleRows.map((row) => <div className="managed-row-actions" key={String(row.id)}><strong>{String(row.name || row.title || row.slug || row.id)}</strong><button onClick={() => edit(row)}>编辑</button><button className="danger-link" onClick={() => void remove(row)}>停用/删除</button></div>)}</div></>;
 }
 
 function GenericTable({ rows, section }: { rows: AdminRecord[]; section: string }) {

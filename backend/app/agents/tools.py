@@ -5,16 +5,27 @@ import re
 from typing import Any
 from urllib.parse import quote
 
+import httpx
 from icalendar import Calendar
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.agents.contracts import ToolResponse
+from app.core.config import get_settings
 from app.models.entities import (
     CampusProcess, Canteen, FoodStall, KnowledgeDocument, Location, Source, Task, TaskReminder, User, UserPreference, utcnow,
 )
 from app.services.ics_service import generate_ics
 from app.services.map_service import MapService, MapServiceError
+from app.services.knowledge_service import (
+    KnowledgeImportError,
+    create_import_job,
+    fetch_article,
+    finish_import_job,
+    import_document,
+    reindex_documents as rebuild_knowledge_index,
+    search_knowledge,
+)
 from app.services.notification_service import NotificationService
 from app.services.time_service import now_china, parse_relative_datetime
 
@@ -148,6 +159,11 @@ class AgentToolbox:
         except MapServiceError as exc:
             return ToolResponse(tool_name="geocode_campus_address", success=False, error="map_service", summary=exc.public_message)
         return self._ok("geocode_campus_address", data, "高德已返回地址坐标", verification={"provider": "amap"})
+
+    async def geocode_address(self, address: str = "", city: str = "广州", **kwargs: Any) -> ToolResponse:
+        result = await self.geocode_campus_address(address=address, city=city, **kwargs)
+        result.tool_name = "geocode_address"
+        return result
 
     def list_canteens(self, query: str = "", **_: Any) -> ToolResponse:
         statement = select(Canteen).options(selectinload(Canteen.stalls), selectinload(Canteen.source), selectinload(Canteen.location)).where(
@@ -384,22 +400,29 @@ class AgentToolbox:
         return result
 
     def search_campus_knowledge(self, query: str = "", **_: Any) -> ToolResponse:
-        statement = select(KnowledgeDocument).options(selectinload(KnowledgeDocument.source)).where(
-            KnowledgeDocument.is_active.is_(True), KnowledgeDocument.data_status != "demo_fixture"
+        results = search_knowledge(
+            self.db,
+            user_id=self.user.id,
+            query=query,
+            campus_id=self.campus_id,
+            limit=8,
         )
-        if self.campus_id:
-            statement = statement.where(or_(KnowledgeDocument.campus_id == self.campus_id, KnowledgeDocument.campus_id.is_(None)))
-        terms = set(re.findall(r"[a-z0-9]{2,}|[\u4e00-\u9fff]{2,8}", query.lower()))
-        rows = []
-        for row in self.db.scalars(statement):
-            text = f"{row.title}\n{row.content}".lower()
-            score = sum((5 if term in row.title.lower() else 1) * text.count(term) for term in terms)
-            if row.is_official: score *= 1.25
-            if score >= 2: rows.append((score, row))
-        rows.sort(key=lambda pair: (-pair[0], pair[1].title))
-        data = [{"id": row.id, "campus_id": row.campus_id, "title": row.title, "snippet": row.content[:500], "url": row.url, "publisher": row.publisher, "published_at": row.published_at, "fetched_at": row.fetched_at, "is_official": row.is_official, "data_status": row.data_status, "score": score} for score, row in rows[:8]]
-        sources = [source for _, row in rows[:8] if (source := _source(row.source))]
-        return self._ok("search_campus_knowledge", data, f"检索到 {len(data)} 条可靠匹配资料", sources=sources, verification={"retrieval": "deterministic_lexical", "low_match_suppressed": True})
+        data = [{**item, "id": item["document_id"], "campus_id": self.campus_id, "data_status": "private_or_reviewed"} for item in results]
+        sources = [{
+            "id": item["document_id"],
+            "title": item["title"],
+            "url": item["url"],
+            "publisher": item["publisher"],
+            "source_type": item["source_type"],
+            "visibility": item["visibility"],
+        } for item in results]
+        return self._ok(
+            "search_campus_knowledge",
+            data,
+            f"检索到 {len(data)} 条有来源的知识资料",
+            sources=sources,
+            verification={"retrieval": "bm25_zh", "user_isolated": True, "low_match_suppressed": True},
+        )
 
     def search_learning_materials(self, query: str = "", **_: Any) -> ToolResponse:
         result = self.search_campus_knowledge(query=query)
@@ -409,9 +432,117 @@ class AgentToolbox:
         return result
 
     def get_source_details(self, source_id: str = "", **_: Any) -> ToolResponse:
+        document = self.db.scalar(select(KnowledgeDocument).where(
+            KnowledgeDocument.id == source_id,
+            KnowledgeDocument.is_active.is_(True),
+            or_(KnowledgeDocument.visibility == "public", KnowledgeDocument.owner_user_id == self.user.id),
+        ))
+        if document:
+            data = {
+                "id": document.id,
+                "title": document.title,
+                "content": document.content[:5000],
+                "url": document.url,
+                "publisher": document.publisher,
+                "source_type": document.source_type,
+                "visibility": document.visibility,
+                "data_status": document.data_status,
+                "created_at": document.created_at,
+            }
+            return self._ok("get_source_details", data, "已读取有权限的知识来源", verification={"user_isolated": True})
         row = self.db.get(Source, source_id)
         data = _source(row)
         return self._ok("get_source_details", data, "已读取来源详情") if data else ToolResponse(tool_name="get_source_details", success=False, error="not_found", summary="来源不存在")
+
+    def import_local_documents(self, confirmed: bool = False, **_: Any) -> ToolResponse:
+        del confirmed
+        return self._confirmation(
+            "import_local_documents",
+            "本地文件导入必须由你在知识库导入页明确选择文件；Agent 不会自行扫描电脑或微信数据库。",
+            {"action_url": "/knowledge/import", "accepted": ["md", "txt", "html", "mhtml", "pdf", "docx", "json", "csv"]},
+        )
+
+    def import_text_content(
+        self,
+        title: str = "",
+        content: str = "",
+        publisher: str = "",
+        confirmed: bool = False,
+        **_: Any,
+    ) -> ToolResponse:
+        preview = {"title": title[:255], "characters": len(content), "visibility": "private"}
+        if not confirmed:
+            return self._confirmation("import_text_content", "保存正文到私有知识库前需要用户确认", preview)
+        try:
+            job = create_import_job(self.db, user_id=self.user.id, source_label="agent-text", total_files=1)
+            outcome = import_document(
+                self.db,
+                user_id=self.user.id,
+                title=title,
+                content=content,
+                source_type="agent_text",
+                campus_id=self.campus_id,
+                publisher=publisher,
+            )
+        except KnowledgeImportError as exc:
+            return ToolResponse(tool_name="import_text_content", success=False, error="invalid_content", summary=str(exc))
+        job.imported_files = int(not outcome.duplicate)
+        job.duplicate_files = int(outcome.duplicate)
+        finish_import_job(job, errors=[])
+        self.db.commit()
+        return self._ok(
+            "import_text_content",
+            {"document_id": outcome.document.id if outcome.document else None, "duplicate": outcome.duplicate},
+            "正文已保存到当前用户的私有知识库",
+            verification={"persisted": True, "confirmed": True, "visibility": "private"},
+        )
+
+    def import_article_url(
+        self,
+        url: str = "",
+        publisher: str = "",
+        confirmed: bool = False,
+        **_: Any,
+    ) -> ToolResponse:
+        if not confirmed:
+            return self._confirmation("import_article_url", "抓取并保存文章 URL 前需要用户确认", {"url": url, "visibility": "private"})
+        try:
+            title, content = fetch_article(url, max_bytes=get_settings().max_upload_bytes)
+            job = create_import_job(self.db, user_id=self.user.id, source_label="agent-url", total_files=1)
+            outcome = import_document(
+                self.db,
+                user_id=self.user.id,
+                title=title,
+                content=content,
+                source_type="agent_url",
+                campus_id=self.campus_id,
+                publisher=publisher,
+                url=url,
+            )
+        except (KnowledgeImportError, httpx.HTTPError) as exc:
+            return ToolResponse(tool_name="import_article_url", success=False, error=type(exc).__name__, summary="文章导入失败；未保存不完整内容")
+        job.imported_files = int(not outcome.duplicate)
+        job.duplicate_files = int(outcome.duplicate)
+        finish_import_job(job, errors=[])
+        self.db.commit()
+        return self._ok(
+            "import_article_url",
+            {"document_id": outcome.document.id if outcome.document else None, "duplicate": outcome.duplicate},
+            "文章已保存到当前用户的私有知识库",
+            verification={"persisted": True, "confirmed": True, "visibility": "private"},
+        )
+
+    def reindex_documents(self, confirmed: bool = False, **_: Any) -> ToolResponse:
+        if not confirmed:
+            return self._confirmation("reindex_documents", "重建私有知识检索索引前需要用户确认")
+        count = rebuild_knowledge_index(self.db, user_id=self.user.id)
+        self.db.commit()
+        return self._ok(
+            "reindex_documents",
+            {"indexed_documents": count},
+            f"已重建 {count} 篇私有资料的检索索引",
+            verification={"persisted": True, "confirmed": True, "user_isolated": True},
+        )
 
     def get_user_profile(self, **_: Any) -> ToolResponse:
         data = {"id": self.user.id, "nickname": self.user.nickname, "campus_id": self.user.campus_id, "grade": self.user.grade, "major": self.user.major, "preferred_name": self.user.preferred_name, "address_style": self.user.address_style, "preferred_location_id": self.user.preferred_location_id}

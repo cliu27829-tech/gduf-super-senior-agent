@@ -11,7 +11,7 @@ ToolHandler = Callable[..., ToolResponse | Awaitable[ToolResponse]]
 
 TOOL_NAMES = (
     "search_campus_locations", "get_location_details", "find_nearby_locations", "list_location_categories",
-    "calculate_walking_route", "build_navigation_link", "geocode_campus_address",
+    "calculate_walking_route", "build_navigation_link", "geocode_address", "geocode_campus_address",
     "list_canteens", "get_canteen_details", "list_food_stalls", "search_food",
     "filter_canteens_by_opening_hours", "calculate_canteen_freshness",
     "create_task", "create_tasks", "list_tasks", "get_task", "update_task", "delete_task",
@@ -19,7 +19,8 @@ TOOL_NAMES = (
     "extract_tasks_from_notification", "parse_deadline", "validate_extracted_tasks", "save_confirmed_tasks",
     "generate_task_ics", "generate_tasks_ics", "verify_ics", "build_calendar_download",
     "search_campus_processes", "get_process_details", "save_process_as_tasks",
-    "search_campus_knowledge", "search_learning_materials", "get_source_details",
+    "import_local_documents", "import_article_url", "import_text_content",
+    "search_campus_knowledge", "search_learning_materials", "get_source_details", "reindex_documents",
     "get_user_profile", "update_user_preference", "get_preferred_address",
 )
 

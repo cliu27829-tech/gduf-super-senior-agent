@@ -248,7 +248,11 @@ class CampusProcess(Base, TimestampMixin):
 
 class KnowledgeDocument(Base, TimestampMixin):
     __tablename__ = "knowledge_documents"
-    __table_args__ = (Index("ix_knowledge_campus_status", "campus_id", "data_status", "is_active"),)
+    __table_args__ = (
+        Index("ix_knowledge_campus_status", "campus_id", "data_status", "is_active"),
+        Index("ix_knowledge_owner_visibility", "owner_user_id", "visibility", "is_active"),
+        Index("ix_knowledge_owner_hash", "owner_user_id", "content_hash"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     campus_id: Mapped[str | None] = mapped_column(
@@ -256,6 +260,9 @@ class KnowledgeDocument(Base, TimestampMixin):
     )
     source_id: Mapped[str | None] = mapped_column(
         ForeignKey("sources.id", ondelete="SET NULL"), nullable=True
+    )
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(255), index=True)
     content: Mapped[str] = mapped_column(Text)
@@ -266,8 +273,54 @@ class KnowledgeDocument(Base, TimestampMixin):
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_official: Mapped[bool] = mapped_column(Boolean, default=False)
     data_status: Mapped[str] = mapped_column(String(40), default="needs_verification")
+    visibility: Mapped[str] = mapped_column(String(20), default="public", index=True)
+    review_status: Mapped[str] = mapped_column(String(30), default="not_required", index=True)
+    source_type: Mapped[str] = mapped_column(String(40), default="manual")
+    original_filename: Mapped[str] = mapped_column(String(255), default="")
+    content_hash: Mapped[str] = mapped_column(String(64), default="", index=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    extracted_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     source: Mapped[Source | None] = relationship()
+    chunks: Mapped[list[KnowledgeChunk]] = relationship(back_populates="document", cascade="all, delete-orphan")
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index", name="uq_knowledge_chunk_position"),
+        Index("ix_knowledge_chunk_owner_document", "owner_user_id", "document_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_documents.id", ondelete="CASCADE"), index=True
+    )
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    campus_id: Mapped[str | None] = mapped_column(
+        ForeignKey("campuses.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    token_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    document: Mapped[KnowledgeDocument] = relationship(back_populates="chunks")
+
+
+class KnowledgeImportJob(Base, TimestampMixin):
+    __tablename__ = "knowledge_import_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    source_label: Mapped[str] = mapped_column(String(255), default="")
+    status: Mapped[str] = mapped_column(String(30), default="running", index=True)
+    total_files: Mapped[int] = mapped_column(Integer, default=0)
+    imported_files: Mapped[int] = mapped_column(Integer, default=0)
+    duplicate_files: Mapped[int] = mapped_column(Integer, default=0)
+    failed_files: Mapped[int] = mapped_column(Integer, default=0)
+    error_summary: Mapped[str] = mapped_column(Text, default="")
 
 
 class UploadedDocument(Base):

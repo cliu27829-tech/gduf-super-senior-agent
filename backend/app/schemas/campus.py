@@ -207,6 +207,7 @@ class KnowledgeRead(BaseModel):
     id: str
     campus_id: str | None
     source_id: str | None
+    owner_user_id: str | None = None
     title: str
     content: str
     publisher: str
@@ -216,6 +217,13 @@ class KnowledgeRead(BaseModel):
     valid_until: datetime | None
     is_official: bool
     data_status: str
+    visibility: str = "public"
+    review_status: str = "not_required"
+    source_type: str = "manual"
+    original_filename: str = ""
+    content_hash: str = ""
+    chunk_count: int = 0
+    extracted_metadata: dict = Field(default_factory=dict)
     is_active: bool
     created_at: datetime
     updated_at: datetime

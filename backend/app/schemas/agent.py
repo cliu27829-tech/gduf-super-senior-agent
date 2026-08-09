@@ -41,6 +41,9 @@ class AgentChatResponse(BaseModel):
     answer: str
     tool_results: list[ToolResult] = Field(default_factory=list)
     sources: list[dict] = Field(default_factory=list)
+    locations: list[dict] = Field(default_factory=list)
+    route: dict | None = None
+    map_action: dict | None = None
     requires_confirmation: bool = False
     degraded: bool = False
     error_id: str | None = None

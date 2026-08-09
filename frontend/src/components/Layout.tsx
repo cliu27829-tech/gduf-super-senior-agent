@@ -9,6 +9,7 @@ const navItems = [
   ["/notifications", "处理通知"],
   ["/tasks", "任务中心"],
   ["/processes", "办事流程"],
+  ["/knowledge/sources", "知识库"],
 ];
 
 function Navigation() {

@@ -58,7 +58,7 @@ async def amap_security_proxy(path: str, request: Request, settings: SettingsDep
         raise HTTPException(status_code=503, detail="高德 JS API 安全代理尚未配置")
     if not path.startswith(("v3/", "v4/")) or ".." in path or "\\" in path:
         raise HTTPException(status_code=404, detail="不支持的高德代理路径")
-    params = list(request.query_params.multi_items())
+    params = [(key, value) for key, value in request.query_params.multi_items() if key.lower() != "jscode"]
     params.append(("jscode", settings.amap_security_code))
     try:
         async with httpx.AsyncClient(timeout=settings.amap_request_timeout_seconds, follow_redirects=False) as client:
@@ -67,5 +67,13 @@ async def amap_security_proxy(path: str, request: Request, settings: SettingsDep
         raise HTTPException(status_code=504, detail="高德安全代理响应超时") from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="高德安全代理暂时不可用") from exc
-    headers = {"content-type": upstream.headers.get("content-type", "application/json")}
+    # AMap's JS SDK loads geocode/log endpoints as JSONP scripts. Some upstream
+    # responses use application/octet-stream, which modern Chromium blocks via
+    # ORB even though the body is valid JavaScript.
+    content_type = (
+        "application/javascript; charset=utf-8"
+        if request.query_params.get("callback")
+        else upstream.headers.get("content-type", "application/json")
+    )
+    headers = {"content-type": content_type, "cache-control": "no-store"}
     return Response(content=upstream.content, status_code=upstream.status_code, headers=headers)

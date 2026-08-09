@@ -157,3 +157,43 @@ export type NotificationDraft = {
   confidence: number;
   date_explanation: string;
 };
+
+export type KnowledgeSource = {
+  id: string;
+  campus_id: string | null;
+  title: string;
+  publisher: string;
+  url: string;
+  visibility: "private" | "public";
+  review_status: string;
+  source_type: string;
+  original_filename: string;
+  content_hash: string;
+  chunk_count: number;
+  extracted_metadata: Record<string, unknown>;
+  data_status: string;
+  content?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ImportResult = {
+  job_id: string;
+  imported: number;
+  duplicates: number;
+  failed: number;
+  document_ids: string[];
+  errors: string[];
+};
+
+export type KnowledgeSearchResult = {
+  document_id: string;
+  title: string;
+  snippet: string;
+  score: number;
+  publisher: string;
+  url: string;
+  visibility: "private" | "public";
+  source_type: string;
+  created_at: string;
+};

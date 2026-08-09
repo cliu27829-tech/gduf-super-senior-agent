@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.agents.contracts import AgentPlan, ToolResponse
@@ -47,6 +48,8 @@ class AgentExecutor:
                     origin_location_id=coordinates[0]["id"],
                     destination_location_id=coordinates[1]["id"],
                 ))
+            elif len(coordinates) == 1:
+                results.append(await self.registry.execute("build_navigation_link", location_id=coordinates[0]["id"]))
             else:
                 results.append(ToolResponse(
                     tool_name="calculate_walking_route", success=False,
@@ -64,6 +67,13 @@ class AgentExecutor:
             return [await self.registry.execute("list_tasks")]
         if intent == "campus_process":
             return [self._legacy("search_campus_processes", self.legacy._processes(message, campus_id))]
+        if intent == "knowledge_search":
+            return [await self.registry.execute("search_campus_knowledge", query=message)]
+        if intent == "knowledge_import":
+            article_url = re.search(r"https?://\S+", message)
+            if article_url:
+                return [await self.registry.execute("import_article_url", url=article_url.group(0))]
+            return [await self.registry.execute("import_local_documents")]
         if intent == "calendar_export":
             tasks = await self.registry.execute("list_tasks")
             download = await self.registry.execute("build_calendar_download", task_ids=[row["id"] for row in tasks.data])

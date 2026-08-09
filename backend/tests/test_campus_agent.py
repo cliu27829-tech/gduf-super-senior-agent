@@ -97,6 +97,9 @@ def test_agent_routes_location_food_and_campus_card_process_to_tools(client: Tes
     assert location.json()["intent"] == "campus_location_search"
     assert location.json()["tool_results"][0]["tool"] == "location_search"
     assert all(item["data_status"] != "demo_fixture" for item in location.json()["tool_results"][0]["data"])
+    assert location.json()["locations"]
+    assert location.json()["map_action"]["type"] == "focus_location"
+    assert location.json()["map_action"]["url"].startswith("/map?location=")
 
     food = client.post("/api/agent/chat", json={"message": "饭堂以前有什么面或肠粉？", "campus_id": campus_id})
     assert food.status_code == 200

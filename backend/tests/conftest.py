@@ -17,6 +17,8 @@ os.environ.update(
         "SEED_DEMO_DATA": "true",
         "AUTO_CREATE_SCHEMA": "true",
         "DEEPSEEK_API_KEY": "",
+        "AMAP_SECURITY_CODE": "",
+        "AMAP_WEBSERVICE_KEY": "",
         "ADMIN_BOOTSTRAP_EMAIL": "admin-test@example.com",
         "ADMIN_BOOTSTRAP_PASSWORD": "test-admin-password-123",
     }
@@ -40,6 +42,8 @@ class MockLLMClient:
     @staticmethod
     def _intent(message: str) -> str:
         patterns = (
+            ("knowledge_import", ("导入资料", "上传知识", "保存文章")),
+            ("knowledge_search", ("知识库", "查资料", "四六级报名")),
             ("notification_to_tasks", ("通知", "提交课程报告", "生成任务")),
             ("task_management", ("我的任务", "待办", "已完成", "逾期")),
             ("campus_process", ("校园卡", "挂失", "补办", "报修")),
@@ -67,7 +71,8 @@ class MockLLMClient:
         if response_format:
             intent = self._intent(user_message)
             tool_plan = [intent] if intent in {
-                "campus_location_search", "canteen_search", "food_search", "campus_process"
+                "campus_location_search", "canteen_search", "food_search", "campus_process",
+                "knowledge_search", "knowledge_import",
             } else []
             return json.dumps({"intent": intent, "confidence": 0.99, "query": user_message, "tool_plan": tool_plan})
 

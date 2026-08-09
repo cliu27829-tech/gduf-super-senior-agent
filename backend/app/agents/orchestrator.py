@@ -19,11 +19,15 @@ DISPLAY = {
     "search_campus_locations": ("location_search", "校园地点"),
     "find_nearby_locations": ("nearby_location_search", "附近地点"),
     "calculate_walking_route": ("walking_route", "步行路线"),
+    "build_navigation_link": ("navigation_link", "开始导航"),
     "list_canteens": ("canteen_search", "饭堂与档口"),
     "search_food": ("food_search", "饭堂与档口"),
     "extract_tasks_from_notification": ("notification_parser", "通知任务预览"),
     "list_tasks": ("task_list", "我的任务"),
     "search_campus_processes": ("process_search", "校园办事流程"),
+    "search_campus_knowledge": ("knowledge_search", "知识库检索"),
+    "import_local_documents": ("knowledge_import", "导入私有知识"),
+    "import_article_url": ("knowledge_import", "导入文章链接"),
     "build_calendar_download": ("calendar_download", "日历导出"),
 }
 
@@ -74,6 +78,28 @@ class AgentOrchestrator:
         ]
         answer = await self.llm.chat_completion(messages, temperature=0.6)
         display_results = [self._display(tool) for tool in tool_responses]
+        locations: list[dict] = []
+        route: dict | None = None
+        for tool in tool_responses:
+            if tool.tool_name in {"search_campus_locations", "find_nearby_locations"}:
+                rows = tool.data if isinstance(tool.data, list) else [tool.data] if isinstance(tool.data, dict) else []
+                locations.extend(row for row in rows if isinstance(row, dict))
+            if tool.tool_name == "calculate_walking_route" and tool.success and isinstance(tool.data, dict):
+                route = tool.data
+        map_action = None
+        if route:
+            map_action = {
+                "type": "route",
+                "url": f"/map?origin={route.get('origin_location_id', '')}&destination={route.get('destination_location_id', '')}",
+                "campus_id": observation.campus_id,
+            }
+        elif locations:
+            map_action = {
+                "type": "focus_location",
+                "url": f"/map?location={locations[0].get('id', '')}",
+                "location_id": locations[0].get("id"),
+                "campus_id": observation.campus_id,
+            }
         sources: list[dict] = []
         seen: set[str] = set()
         for tool in tool_responses:
@@ -110,6 +136,9 @@ class AgentOrchestrator:
             answer=answer,
             tool_results=display_results,
             sources=sources,
+            locations=locations,
+            route=route,
+            map_action=map_action,
             requires_confirmation=plan.requires_confirmation or any(tool.requires_user_action for tool in tool_responses),
             degraded=False,
             error_id=None,
