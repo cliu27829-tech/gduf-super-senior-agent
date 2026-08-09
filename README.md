@@ -21,7 +21,8 @@
 - 饭堂、楼层、档口、常见餐品及核验状态；没有可靠今日菜单时明确返回“无实时数据”。
 - TXT/PDF 通知解析、可编辑预览、确认后批量入库，图片 OCR 明确标记为未启用。
 - 任务增删改查、今日/本周/临期/逾期/完成视图、批量操作与 `Asia/Shanghai` ICS 双提醒。
-- Agent 采用 observe → classify → plan → execute → verify → confirm → remember → respond 管线，具备 15 类意图、41 个注册工具、多轮历史、工具/来源卡片、失败重试与明确模型错误。
+- 私有知识库支持正文、文件和安全 URL 导入，包含文本提取、清洗、SHA-256 去重、中文 BM25、分块、来源详情、重建索引、用户隔离与管理员审核；不会持久化上传原文件。
+- Agent 采用 observe → classify → plan → execute → verify → confirm → remember → respond 管线，覆盖校园、学习、知识检索/导入等意图，具备统一工具注册表、多轮历史、工具/来源卡片、结构化地图动作、失败重试与明确模型错误。
 - 用户可设置希望大师兄使用的称呼、称呼风格和常用地点；校园事实与通用学习建议使用不同回答边界。
 - 校园办事流程可检索并在确认后保存为任务；管理员可维护带来源、时效和核验状态的校园知识资料。
 - 基于角色的管理后台：用户、校区、地点、地图、饭堂、档口、流程、来源、纠错、陈旧数据、日志和导入导出。
@@ -59,7 +60,8 @@ legacy_streamlit/    只作追溯的旧版 Streamlit 实现
 ```powershell
 python -m venv venv
 .\venv\Scripts\python.exe -m pip install -r backend\requirements.txt -r backend\requirements-dev.txt
-Copy-Item .env.example .env
+Copy-Item .env.example backend\.env
+# 编辑 backend\.env，至少填写新的 DEEPSEEK_API_KEY；不要把它提交到 Git
 Set-Location backend
 ..\venv\Scripts\alembic.exe upgrade head
 ..\venv\Scripts\uvicorn.exe app.main:app --reload
@@ -70,10 +72,14 @@ Set-Location backend
 ```powershell
 Set-Location frontend
 npm ci
+@"
+VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_AMAP_JS_KEY=你的高德Web端JS_API_Key
+"@ | Set-Content -Encoding UTF8 .env.local
 npm run dev
 ```
 
-开发后端默认可用 SQLite；需要和生产一致时使用 Docker PostgreSQL。
+打开 `http://127.0.0.1:5173`。开发后端默认可用 SQLite；需要和生产一致时使用 Docker PostgreSQL。高德安全密钥只填写在 `backend/.env` 的 `AMAP_SECURITY_CODE`，不要放入前端。
 
 ## Docker 一键启动
 
@@ -87,7 +93,7 @@ docker compose up --build
 
 ## 环境变量
 
-必需生产变量：`DATABASE_URL`、`JWT_SECRET`、`REFRESH_TOKEN_SECRET`、`FRONTEND_URL`、`BACKEND_URL`、`ALLOWED_ORIGINS`、`COOKIE_SECURE`、`ADMIN_BOOTSTRAP_EMAIL`、`ADMIN_BOOTSTRAP_PASSWORD`。启用聊天还必须配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_BASE_URL` 默认 `https://api.deepseek.com`，`DEEPSEEK_MODEL` 默认 `deepseek-v4-flash`。启用真实地图需要浏览器公开的 `VITE_AMAP_JS_KEY`，以及仅后端可见的 `AMAP_SECURITY_CODE`、`AMAP_WEBSERVICE_KEY`；浏览器通过同源安全代理使用安全码。
+必需生产变量：`DATABASE_URL`、`JWT_SECRET`、`REFRESH_TOKEN_SECRET`、`FRONTEND_URL`、`BACKEND_URL`、`ALLOWED_ORIGINS`、`COOKIE_SECURE`、`ADMIN_BOOTSTRAP_EMAIL`、`ADMIN_BOOTSTRAP_PASSWORD`。启用聊天还必须配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_BASE_URL` 默认 `https://api.deepseek.com`，`DEEPSEEK_MODEL` 默认 `deepseek-v4-flash`。启用真实地图需要浏览器公开的 `VITE_AMAP_JS_KEY` 和仅后端可见的 `AMAP_SECURITY_CODE`；`AMAP_WEBSERVICE_KEY` 是可选增强，未配置时地址解析和步行路线使用高德浏览器 JS API。
 
 生产环境会拒绝弱 JWT Secret 和不安全 Cookie。DeepSeek Key 只在后端读取，不进入浏览器、数据库、日志或 Git。完整说明见 [安全文档](docs/SECURITY.md)。
 
@@ -115,7 +121,7 @@ npm run build
 npm run test:e2e
 ```
 
-当前本地结果（2026-08-04）：后端 56 项通过、前端 20 项通过、Playwright 端到端 1 条完整流程通过，ESLint、TypeScript 与 Vite 生产构建通过。端到端测试由真实 FastAPI 请求本地 OpenAI 协议 Mock 服务，不调用付费模型；本机新 DeepSeek Key 的四轮人工冒烟也已通过，Key 未写入测试记录。详见 [完整 Agent 冒烟记录](docs/COMPLETE_AGENT_SMOKE_TEST.md)。
+当前本地结果（2026-08-09）：后端 60 项、前端 20 项通过，ESLint、TypeScript、Python 编译与 Vite 生产构建通过。Playwright 已分别验证整站 MVP、私有知识、授权 PDF 文本层、真实高德地图和管理员审核；真实 DeepSeek 多轮浏览器流程也已通过，Key、模型原文响应和私有文件路径均未写入测试记录。详见 [持续执行状态](docs/MASTER_EXECUTION_STATE.md) 与 [完整 Agent 冒烟记录](docs/COMPLETE_AGENT_SMOKE_TEST.md)。
 
 ## 部署
 
@@ -125,11 +131,22 @@ npm run test:e2e
 
 后台路径为 `/admin`。启动时仅在数据库尚无该邮箱时创建 `ADMIN_BOOTSTRAP_EMAIL` 对应管理员。初始密码只能通过部署环境变量提供，首次登录后应立即修改。管理员无法查看密码哈希、明文密码、Token 或 API Key。见 [管理员手册](docs/ADMIN_GUIDE.md)。
 
+## 好人师兄知识库
+
+本地批量导入脚本位于 `backend/scripts/import_local_knowledge.py`，必须显式传入目录，不会自动扫描桌面、微信数据库或相邻目录。建议先 dry-run：
+
+```powershell
+Set-Location backend
+..\venv\Scripts\python.exe scripts\import_local_knowledge.py "你明确授权的目录" --dry-run
+```
+
+确认清单后再移除 `--dry-run`。导入内容默认仅拥有者可见；管理员共享前必须填写核验方式、字段、证据和备注并二次确认。私有导入日志、索引及原始资料目录均已加入 `.gitignore`。
+
 ## 数据来源与时效
 
 生产查询默认隐藏 `demo_fixture`。广州现有 7 个地点、2 个历史饭堂和 5 条历史楼层/餐品记录；肇庆有 3 个待核验地点和 1 个待核验饭堂；清远有 1 个可查询校区锚点、2 个隐藏演示点和 1 个隐藏演示饭堂。广州校园卡服务、校区地址使用公开来源线索；快递、医务与饭堂经营项目属于明确标注的历史资料。当前没有可靠实时菜单、当前价格或当前营业状态；地图路线来自配置后的高德 Web 服务，不把种子示意坐标当作 GPS 点位。
 
-数据分为官方来源、管理员核验、审核后的用户投稿、历史信息、普通网页线索、演示数据和待核验数据。前台同时展示核验状态、来源、可信度和时间；“已核验”必须提交证据。见 [数据来源](docs/DATA_SOURCES.md) 与 [核验清单](docs/DATA_VERIFICATION_CHECKLIST.md)。
+数据分为官方来源、管理员核验、审核后的用户投稿、私有导入、历史信息、普通网页线索、演示数据和待核验数据。前台同时展示核验状态、来源、可信度和时间；“已核验”必须提交证据。地图校区锚点由官方地址实时地理编码，未核验的模型坐标不会写入正式地点。见 [数据来源](docs/DATA_SOURCES.md) 与 [核验清单](docs/DATA_VERIFICATION_CHECKLIST.md)。
 
 ## 隐私与安全
 
@@ -140,7 +157,7 @@ npm run test:e2e
 - 三校真实点位、营业时间、饭堂楼层、档口和办事流程仍需学校或现场证据核验。
 - 没有实时菜单、图片 OCR、邮件/短信/浏览器 Push；网站关闭后不会主动推送。
 - 忘记密码仅展示说明，尚未接入邮件重置。
-- 当前种子数据没有通过核验的 GPS 坐标；未配置高德三项凭据时页面会明确显示配置提示，不渲染假地图或假路线。
+- 当前种子数据没有两个可直接互相规划的已核验 GPS 地点；配置高德 JS Key 与安全密钥后可输入真实地址规划路线，WebService Key 可选。未配置时页面明确显示配置提示，不渲染假地图或假路线。
 - 线上部署需要用户先登录一个部署平台；目前没有公开 URL。
 
 ## Demo 账号

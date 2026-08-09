@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("registers and completes the three real MVP workflows", async ({ page }) => {
+test("registers and completes the three real MVP workflows", async ({ page, request }) => {
   test.setTimeout(180_000);
   const suffix = `${Date.now()}`;
   const email = `e2e-${suffix}@example.com`;
@@ -10,7 +10,9 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   const failedRequests: string[] = [];
   const serverErrors: string[] = [];
   const clientErrors: string[] = [];
+  let cleanupStatus = 204;
 
+  page.on("dialog", (dialog) => dialog.accept());
   page.on("console", (message) => { if (message.type() === "error" && !message.text().startsWith("Failed to load resource:")) consoleErrors.push(message.text()); });
   page.on("requestfailed", (request) => {
     const errorText = request.failure()?.errorText || "failed";
@@ -23,6 +25,7 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
     else if (status >= 400 && !(status === 401 && /\/api\/auth\/(me|refresh)$/.test(response.url()))) clientErrors.push(`${status} ${response.url()}`);
   });
 
+  try {
   await page.goto("/register", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "创建账号" })).toBeVisible();
   await page.getByLabel("用户名").fill(username);
@@ -58,26 +61,33 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   await expect(greeting).not.toContainText("基础模式");
 
   const guidance = await send("大一高数跟不上怎么办？");
-  await expect(guidance).toContainText(/概念|错题|基础题/);
+  await expect(guidance).toContainText("意图：learning_guidance");
+  expect((await guidance.innerText()).length).toBeGreaterThan(80);
 
   await send("我叫小明，请记住。");
   const memory = await send("我刚才说我叫什么？");
   await expect(memory).toContainText("小明");
 
   const food = await send("北苑饭堂有什么吃的？");
-  await expect(food).toContainText("当日菜单");
+  await expect(food).toContainText(/历史|待核验|不代表现在|不提供可靠实时菜单/);
+  await expect(food).not.toContainText(/这是今天的菜单|当日实时菜单/);
   await expect(food.getByText("饭堂与档口")).toBeVisible();
   await expect(food.getByText("来源", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "校园地图" }).first().click();
-  await expect(page.getByRole("heading", { name: "需要配置高德地图凭据" })).toBeVisible();
+  await expect(
+    page.getByLabel(/高德真实道路地图/).or(page.getByRole("heading", { name: "需要配置高德地图凭据" })),
+  ).toBeVisible();
   await expect(page.getByText("北苑饭堂", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "办事流程" }).first().click();
   await page.getByRole("button", { name: /校园卡丢失挂失与补卡/ }).click();
   await expect(page.getByText("校园卡丢卡挂失补卡流程")).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept());
+  const processTasksResponse = page.waitForResponse((response) =>
+    response.url().includes("/create-tasks") && response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "确认并保存为任务" }).click();
+  expect((await processTasksResponse).ok()).toBe(true);
   await expect(page.getByText(/已保存 \d+ 条任务/)).toBeVisible();
 
   await page.getByRole("link", { name: "处理通知" }).first().click();
@@ -117,12 +127,10 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   await page.getByRole("link", { name: "任务中心" }).first().click();
   await expect(page.getByText("E2E 已编辑任务", { exact: true })).toBeVisible();
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.locator("article.task-table-row").filter({ hasText: "E2E 已编辑任务" }).getByRole("button", { name: "删除" }).click();
   await expect(page.getByText("E2E 已编辑任务", { exact: true })).toHaveCount(0);
 
   await page.getByRole("link", { name: "端" }).click();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "删除账户和个人数据" }).click();
   await expect(page.getByRole("link", { name: "登录" })).toBeVisible();
 
@@ -130,4 +138,11 @@ test("registers and completes the three real MVP workflows", async ({ page }) =>
   expect(clientErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
   expect(consoleErrors).toEqual([]);
+  } finally {
+    const login = await request.post("http://127.0.0.1:8000/api/auth/login", { data: { email, password } });
+    if (login.status() === 200) {
+      cleanupStatus = (await request.delete("http://127.0.0.1:8000/api/auth/account")).status();
+    }
+  }
+  expect(cleanupStatus).toBe(204);
 });
