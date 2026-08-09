@@ -1,0 +1,2 @@
+campus_id,name,aliases,category,sub_category,description,address,area,floor,latitude,longitude,map_x,map_y,opening_hours,phone,services,payment_methods,verification_status,verification_method,confidence,freshness_status,data_status,is_active,source_ids,evidence,verification_note
+REPLACE_WITH_CAMPUS_UUID,示例地点,别名一|别名二,service,,请删除示例行后填写真实数据,校内地址,所在区域,,23.000000,113.000000,0.50,0.50,待核验,,服务一|服务二,校园卡|微信,needs_verification,admin_import,0.0,needs_verification,admin_import,true,,,待核验

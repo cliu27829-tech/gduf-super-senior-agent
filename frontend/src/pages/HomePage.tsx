@@ -1,0 +1,61 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { api } from "../api";
+import { useAuth } from "../auth";
+import type { Campus } from "../types";
+
+const entrances = [
+  { icon: "问", title: "问大师兄", detail: "学习方法、校园地点和办事问题都可以直接问", href: "/chat" },
+  { icon: "⌖", title: "查校园", detail: "找到有来源的地点，并对精确点位发起导航", href: "/map" },
+  { icon: "文", title: "处理通知", detail: "分清重要规则和真正要做的事，再确认保存", href: "/notifications" },
+  { icon: "食", title: "校园生活", detail: "查看饭堂、常见餐品和信息核验状态", href: "/canteens" },
+];
+
+export default function HomePage() {
+  const { user } = useAuth();
+  const [campuses, setCampuses] = useState<Campus[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => { api<Campus[]>("/campuses").then(setCampuses).catch((reason) => setError(reason instanceof Error ? reason.message : "校区数据加载失败")); }, []);
+  return (
+    <>
+      <section className="hero section-wrap">
+        <div className="hero-copy">
+          <p className="eyebrow">广东金融学院校园信息与执行助手</p>
+          <h1>读懂校园信息，<br /><em>帮你把事情办明白。</em></h1>
+          <p className="hero-lead">不把旧资料说成最新，不让 AI 猜饭堂和流程。每一条校园事实，都带着来源、核验状态和更新时间。</p>
+          <div className="hero-actions">
+            <Link className="button" to={user ? "/dashboard" : "/register"}>{user ? "进入工作台" : "开始使用"}</Link>
+            <Link className="ghost-button" to={user ? "/chat" : "/login"}>问问大师兄</Link>
+          </div>
+        </div>
+        <div className="trust-board" aria-label="数据可信度说明">
+          <span className="board-number">{String(campuses.length).padStart(2, "0")}</span>
+          <strong>个已加载校区，分开查询</strong>
+          <div className="rule" />
+          <p>官方来源</p><small>优先展示学校与校区官网</small>
+          <p>人工核验</p><small>管理员填写证据后才能标记已核验</small>
+          <p>诚实降级</p><small>没有实时菜单时明确说没有</small>
+        </div>
+      </section>
+      {error && <div className="section-wrap error-banner" role="alert">{error}</div>}
+      <section className="section-wrap section-block">
+        <div className="section-heading"><p className="eyebrow">常用入口</p><h2>少绕一步，快把事情做完</h2></div>
+        <div className="entrance-grid">
+          {entrances.map((item) => <Link className="entrance-card" to={user ? item.href : "/login"} key={item.title}><span>{item.icon}</span><h3>{item.title}</h3><p>{item.detail}</p><b>打开 →</b></Link>)}
+        </div>
+      </section>
+      <section className="campus-band">
+        <div className="section-wrap campus-band-inner">
+          <div><p className="eyebrow light">三个校区</p><h2>只看你所在校区的信息</h2><p>跨校区问题会显式区分，避免把广州、肇庆和清远的数据混在一起。</p></div>
+          <div className="campus-list">
+            {campuses.map((campus, index) => (
+              <div className="campus-row" key={campus.id}><span>0{index + 1}</span><strong>{campus.name}</strong><small>数据状态逐条标记</small></div>
+            ))}
+            {!campuses.length && !error && <small>正在加载校区数据…</small>}
+          </div>
+        </div>
+      </section>
+      <section className="section-wrap honesty-note"><strong>关于“实时”</strong><p>当前没有可靠的实时饭堂菜单。高德凭据和核验 GPS 点位齐全时可查询真实步行路线；否则保留文字地点查询并明确说明缺失条件。</p></section>
+    </>
+  );
+}

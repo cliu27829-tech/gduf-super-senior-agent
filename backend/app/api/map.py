@@ -1,0 +1,148 @@
+from __future__ import annotations
+
+from math import asin, cos, radians, sin, sqrt
+from typing import Annotated
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import select
+
+from app.core.config import Settings, get_settings
+from app.core.dependencies import CurrentUser, DbSession
+from app.models.entities import Location
+from app.schemas.map import RouteFromCurrentRequest, RouteFromCurrentResponse
+from app.services.map_service import MapService, MapServiceError
+
+
+router = APIRouter(prefix="/map", tags=["map"])
+SettingsDependency = Annotated[Settings, Depends(get_settings)]
+
+
+def _distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius = 6_371_000
+    d_lat = radians(lat2 - lat1)
+    d_lon = radians(lon2 - lon1)
+    value = sin(d_lat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lon / 2) ** 2
+    return 2 * radius * asin(sqrt(value))
+
+
+def _accuracy(accuracy: float) -> tuple[str, str]:
+    if accuracy <= 30:
+        return "accurate", "定位较准确"
+    if accuracy <= 100:
+        return "approximate", f"当前位置存在约 {round(accuracy)} 米偏差"
+    return "low", "当前定位精度不太够，可以重新定位或手动选择起点。"
+
+
+@router.get("/status")
+def map_status(settings: SettingsDependency) -> dict:
+    return {
+        "provider": "amap",
+        "webservice_configured": bool(settings.amap_webservice_key.strip()),
+        "security_proxy_configured": bool(settings.amap_security_code.strip()),
+    }
+
+
+@router.get("/geocode")
+async def geocode(
+    _user: CurrentUser,
+    address: str = Query(min_length=2, max_length=255),
+    city: str = Query(default="广州", min_length=1, max_length=50),
+) -> dict:
+    try:
+        return await MapService.configured().geocode(address, city)
+    except MapServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.public_message) from exc
+
+
+@router.get("/walking-route")
+async def walking_route(
+    _user: CurrentUser,
+    origin_longitude: float = Query(ge=-180, le=180),
+    origin_latitude: float = Query(ge=-90, le=90),
+    destination_longitude: float = Query(ge=-180, le=180),
+    destination_latitude: float = Query(ge=-90, le=90),
+) -> dict:
+    try:
+        return await MapService.configured().walking_route(
+            origin_longitude, origin_latitude, destination_longitude, destination_latitude
+        )
+    except MapServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.public_message) from exc
+
+
+@router.post("/route-from-current", response_model=RouteFromCurrentResponse)
+async def route_from_current(payload: RouteFromCurrentRequest, _user: CurrentUser, db: DbSession) -> dict:
+    accuracy_status, accuracy_message = _accuracy(payload.origin.accuracy)
+    if accuracy_status == "low":
+        raise HTTPException(status_code=422, detail=accuracy_message)
+    destination = db.scalar(
+        select(Location).where(
+            Location.id == payload.destination_location_id,
+            Location.is_active.is_(True),
+            Location.data_status != "demo_fixture",
+        )
+    )
+    if not destination:
+        raise HTTPException(status_code=404, detail="目的地不存在")
+    if (
+        destination.latitude is None
+        or destination.longitude is None
+        or destination.coordinate_accuracy != "exact"
+        or destination.coordinate_verified_at is None
+    ):
+        raise HTTPException(status_code=422, detail="目的地尚无经过核验的精确坐标，不能直接导航")
+    try:
+        route = await MapService.configured().walking_route(
+            payload.origin.longitude,
+            payload.origin.latitude,
+            float(destination.longitude),
+            float(destination.latitude),
+        )
+    except MapServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.public_message) from exc
+    off_campus = _distance_meters(
+        payload.origin.latitude,
+        payload.origin.longitude,
+        float(destination.latitude),
+        float(destination.longitude),
+    ) > 5_000
+    return {
+        **route,
+        "origin": payload.origin,
+        "destination_location_id": destination.id,
+        "destination_name": destination.name,
+        "destination_longitude": float(destination.longitude),
+        "destination_latitude": float(destination.latitude),
+        "accuracy_status": accuracy_status,
+        "accuracy_message": accuracy_message,
+        "off_campus": off_campus,
+    }
+
+
+@router.api_route("/_AMapService/{path:path}", methods=["GET"])
+async def amap_security_proxy(path: str, request: Request, settings: SettingsDependency) -> Response:
+    """Proxy only AMap JS API support calls while keeping securityJsCode server-side."""
+    if not settings.amap_security_code.strip():
+        raise HTTPException(status_code=503, detail="高德 JS API 安全代理尚未配置")
+    if not path.startswith(("v3/", "v4/")) or ".." in path or "\\" in path:
+        raise HTTPException(status_code=404, detail="不支持的高德代理路径")
+    params = [(key, value) for key, value in request.query_params.multi_items() if key.lower() != "jscode"]
+    params.append(("jscode", settings.amap_security_code))
+    try:
+        async with httpx.AsyncClient(timeout=settings.amap_request_timeout_seconds, follow_redirects=False) as client:
+            upstream = await client.get(f"{settings.amap_api_base_url.rstrip('/')}/{path}", params=params)
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="高德安全代理响应超时") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="高德安全代理暂时不可用") from exc
+    # AMap's JS SDK loads geocode/log endpoints as JSONP scripts. Some upstream
+    # responses use application/octet-stream, which modern Chromium blocks via
+    # ORB even though the body is valid JavaScript.
+    content_type = (
+        "application/javascript; charset=utf-8"
+        if request.query_params.get("callback")
+        else upstream.headers.get("content-type", "application/json")
+    )
+    headers = {"content-type": content_type, "cache-control": "no-store"}
+    return Response(content=upstream.content, status_code=upstream.status_code, headers=headers)

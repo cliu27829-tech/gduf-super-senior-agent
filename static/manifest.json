@@ -1,7 +1,7 @@
 {
-  "name": "广金万事屋师兄",
-  "short_name": "广金万事屋",
-  "description": "专为广东金融学院学生打造的智能助手",
+  "name": "广金大师兄",
+  "short_name": "广金大师兄",
+  "description": "广东金融学院校园信息执行与位置服务 Agent",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -9,12 +9,12 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Guangdong%20University%20of%20Finance%20school%20emblem%20red%20circle%20with%20golden%20text%20and%20architectural%20symbol%20minimalist%20logo&image_size=square",
+      "src": "/static/avatar.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Guangdong%20University%20of%20Finance%20school%20emblem%20red%20circle%20with%20golden%20text%20and%20architectural%20symbol%20minimalist%20logo&image_size=square_hd",
+      "src": "/static/avatar.png",
       "sizes": "512x512",
       "type": "image/png"
     }

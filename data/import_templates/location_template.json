@@ -1,0 +1,35 @@
+{
+  "locations": [
+    {
+      "id": "replace-with-stable-id",
+      "name": "待导入地点",
+      "aliases": ["别名"],
+      "campus": "广州校本部",
+      "category": "canteen",
+      "sub_category": "",
+      "description": "导入模板，不是真实校园数据。",
+      "building": "",
+      "floor": "",
+      "area": "",
+      "latitude": null,
+      "longitude": null,
+      "map_x": 0.5,
+      "map_y": 0.5,
+      "address": "",
+      "opening_hours": "",
+      "phone": "",
+      "services": [],
+      "payment_methods": [],
+      "navigation_url": "",
+      "source_references": [],
+      "verification_method": "unverified_seed",
+      "verified_at": null,
+      "valid_from": null,
+      "valid_until": null,
+      "freshness_status": "needs_verification",
+      "confidence": 0.0,
+      "is_active": true,
+      "data_status": "demo_fixture"
+    }
+  ]
+}

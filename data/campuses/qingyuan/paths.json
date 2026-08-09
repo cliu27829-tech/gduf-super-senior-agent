@@ -1,0 +1,16 @@
+{
+  "notice": "节点来自已核对的公开 POI；边只表示公开校园示意图中可见的相邻关系，未做无障碍与现场通行核验，因此 verified=false，不参与正式路线计算。",
+  "nodes": [
+    {"id":"qy-node-library","location_id":"qy-library","name":"图书馆 POI","latitude":23.716633,"longitude":113.085429,"verified":true,"source_url":"https://www.amap.com/"},
+    {"id":"qy-node-minxue","location_id":"qy-minxue-building","name":"敏学楼 POI","latitude":23.717475,"longitude":113.088625,"verified":true,"source_url":"https://www.amap.com/"},
+    {"id":"qy-node-gym","location_id":"qy-gym","name":"南区体育馆 POI","latitude":23.712581,"longitude":113.087005,"verified":true,"source_url":"https://www.amap.com/"},
+    {"id":"qy-node-express","location_id":"qy-express","name":"快递驿站 POI","latitude":23.720857,"longitude":113.086753,"verified":true,"source_url":"https://www.amap.com/"},
+    {"id":"qy-node-ming-lake","location_id":"qy-ming-lake","name":"明湖 POI","latitude":23.716624,"longitude":113.086463,"verified":true,"source_url":"https://www.amap.com/"},
+    {"id":"qy-node-mulan","location_id":"qy-mulan-square","name":"木兰广场 POI","latitude":23.716663,"longitude":113.087922,"verified":true,"source_url":"https://www.amap.com/"}
+  ],
+  "edges": [
+    {"id":"qy-edge-library-ming","from_node_id":"qy-node-library","to_node_id":"qy-node-ming-lake","instruction":"图书馆与明湖之间的公开校园示意连接，现场通行待核验。","bidirectional":true,"accessible":false,"verified":false,"source_url":"https://app.gaokaozhitongche.com/news/h/jOv3Gxbw"},
+    {"id":"qy-edge-ming-mulan","from_node_id":"qy-node-ming-lake","to_node_id":"qy-node-mulan","instruction":"明湖与木兰广场之间的公开校园示意连接，现场通行待核验。","bidirectional":true,"accessible":false,"verified":false,"source_url":"https://app.gaokaozhitongche.com/news/h/jOv3Gxbw"},
+    {"id":"qy-edge-mulan-minxue","from_node_id":"qy-node-mulan","to_node_id":"qy-node-minxue","instruction":"木兰广场与敏学楼之间的公开校园示意连接，现场通行待核验。","bidirectional":true,"accessible":false,"verified":false,"source_url":"https://app.gaokaozhitongche.com/news/h/jOv3Gxbw"}
+  ]
+}

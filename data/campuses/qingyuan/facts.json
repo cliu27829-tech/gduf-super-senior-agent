@@ -1,0 +1,35 @@
+{
+  "source": {
+    "title": "广东金融学院清远校区情况",
+    "url": "https://qyxq.gduf.edu.cn/info/1128/1396.htm",
+    "published_at": "2026-06-25T00:00:00+08:00"
+  },
+  "colleges": [
+    {"name": "金融与投资学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "保险学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "经济贸易学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "信用管理学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "工商管理学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "计算机学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "外国语言与文化学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "法学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "财经与新媒体学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "金融数学与统计学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "公共管理学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "心理与创业教育学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "国家金融学学院", "education_mode": "2+2", "grades": ["一、二年级"]},
+    {"name": "大数据与人工智能学院", "education_mode": "清远全学段四年制", "grades": ["一至四年级"]},
+    {"name": "京东数智现代产业学院", "education_mode": "产业学院", "grades": []},
+    {"name": "低空经济产业学院", "education_mode": "产业学院", "grades": []},
+    {"name": "华为ICT金融信创产业学院", "education_mode": "产业学院", "grades": []},
+    {"name": "跨境电商产业学院", "education_mode": "产业学院", "grades": []}
+  ],
+  "facts": [
+    {"subject": "清远校区", "predicate": "2+2学院数量", "object": "13", "aliases": ["清远有多少个学院", "2+2学院"]},
+    {"subject": "清远校区", "predicate": "学院统计口径", "object": "13仅指官方简介列出的在清远培养一、二年级学生的‘2+2’学院，不等于清远校区全部教学组织。清远另有全学段四年制学院和产业学院。", "aliases": ["学院口径", "13个学院"]},
+    {"subject": "清远校区", "predicate": "学生与专业", "object": "截至官方页面2026年6月更新，清远校区现有学生8000余人，涵盖7个学科门类、35个专业。", "aliases": ["多少学生", "多少专业"]},
+    {"subject": "清远校区", "predicate": "全学段学院", "object": "大数据与人工智能学院是清远校区全学段四年制二级学院，官方简介列出计算机科学与技术、软件工程、数据科学与大数据技术、应用统计学、人工智能等专业。", "aliases": ["四年都在清远", "大数据与人工智能学院"]},
+    {"subject": "清远校区", "predicate": "产业学院", "object": "官方简介列出京东数智现代产业学院、低空经济产业学院、华为ICT金融信创产业学院、跨境电商产业学院。", "aliases": ["产业学院"]},
+    {"subject": "清远校区饭堂", "predicate": "核验口径", "object": "学校官方资料确认南区饭堂和北区饭堂；‘西饭’是用户报告的小吃街/餐饮区域称呼，仍待学校或现场来源核验，不能算作已官方确认的第三个饭堂。", "aliases": ["北饭", "南饭", "西饭", "几个饭堂"]}
+  ]
+}

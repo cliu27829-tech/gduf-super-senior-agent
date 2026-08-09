@@ -1,0 +1,29 @@
+[
+  {
+    "id": "curated-gz-dormitory-groups",
+    "fact": "一份学生组织历史资料把广州校本部宿舍概括为南苑与北苑两片生活区；具体楼栋分配会随年份变化，回答时只能作为定位线索，并提醒用户以当年宿管或辅导员通知为准。",
+    "campus": "广州校本部",
+    "source_title": "即将开学回本部的小伙伴看过来：提前了解本部宿舍楼群",
+    "source_kind": "historical_student_media",
+    "verification_status": "needs_verification",
+    "usage_rule": "不得据此断言当前宿舍分配、入住条件或收费。"
+  },
+  {
+    "id": "curated-gz-north-teaching-name",
+    "fact": "历史考试通知使用过“北教学楼”这一名称；当前地图点位应以已核验的高德 POI“北教学楼AD座”为准。",
+    "campus": "广州校本部",
+    "source_title": "关于北教学楼封闭考场的通知",
+    "source_kind": "historical_student_media",
+    "verification_status": "partially_verified",
+    "usage_rule": "只能辅助别名匹配，不得把历史封场安排当作当前安排。"
+  },
+  {
+    "id": "curated-makeup-exam-time-sensitive",
+    "fact": "补考安排属于强时效通知，历史预通知只能帮助识别问题类型，不能回答当前考试时间、地点或名单。",
+    "campus": "all",
+    "source_title": "2025-2026-2学期补考预通知",
+    "source_kind": "historical_student_media",
+    "verification_status": "historical_only",
+    "usage_rule": "必须要求用户提供当期通知，或检索校方当期来源。"
+  }
+]
