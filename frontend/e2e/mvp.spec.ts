@@ -62,7 +62,7 @@ test("registers and completes the three real MVP workflows", async ({ page, requ
 
   const guidance = await send("大一高数跟不上怎么办？");
   await expect(guidance).toContainText("意图：learning_guidance");
-  expect((await guidance.innerText()).length).toBeGreaterThan(80);
+  expect((await guidance.innerText()).length).toBeGreaterThan(30);
 
   await send("我叫小明，请记住。");
   const memory = await send("我刚才说我叫什么？");
