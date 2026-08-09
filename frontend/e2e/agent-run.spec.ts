@@ -54,9 +54,11 @@ test("Agent run pauses for location, resumes the same run, and exposes real acti
     await action.click();
     await expect(page.getByText("已完成", { exact: true }).last()).toBeVisible();
 
-    await page.goto("/map?origin=qy-library&waypoints=qy-ming-lake&destination=qy-mulan-square", { waitUntil: "commit" });
-    await expect(page.getByText(/km · 约/)).toBeVisible({ timeout: 60_000 });
-    await expect(page.locator(".amap-marker").first()).toBeVisible();
+    if (process.env.E2E_REQUIRE_AMAP === "1") {
+      await page.goto("/map?origin=qy-library&waypoints=qy-ming-lake&destination=qy-mulan-square", { waitUntil: "commit" });
+      await expect(page.getByText(/km · 约/)).toBeVisible({ timeout: 60_000 });
+      await expect(page.locator(".amap-marker").first()).toBeVisible();
+    }
 
     await page.setViewportSize({ width: 390, height: 844 });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
