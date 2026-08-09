@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, streamAgentChat } from "../api";
 import { useAuth } from "../auth";
 import { MarkdownMessage } from "../components/MarkdownMessage";
+import { LocationPermissionSheet, locationAccuracy, useGeolocation, type BrowserLocation } from "../location";
 import type { NotificationParseResult } from "../types";
 
 type ToolResult = { tool: string; status: string; title: string; data: unknown };
 type Source = { title?: string; url?: string; publisher?: string; published_at?: string | null; verified_at?: string | null; source_type?: string };
-type MapAction = { type: string; url: string; location_id?: string; campus_id?: string };
+type MapAction = { type: string; url?: string; location_id?: string; destination_location_id?: string; campus_id?: string; reason?: string };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; intent?: string; tool_results?: ToolResult[]; sources?: Source[]; map_action?: MapAction | null; degraded?: boolean; error_id?: string | null; data_status?: string };
 type Conversation = { id: string; title: string; updated_at: string };
 type ChatResponse = { conversation_id: string; message_id: string; intent: string; answer: string; tool_results: ToolResult[]; sources: Source[]; locations: Record<string, unknown>[]; route: Record<string, unknown> | null; map_action: MapAction | null; degraded: boolean; error_id: string | null; data_status: string };
@@ -40,10 +41,14 @@ export default function ChatPage() {
   const [stage, setStage] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<{ destinationId: string; destinationName: string; message: string } | null>(null);
+  const [locationSheetOpen, setLocationSheetOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const navigate = useNavigate();
+  const geolocation = useGeolocation();
 
   const loadConversations = async () => {
     try { setConversations(await api<Conversation[]>("/agent/conversations")); }
@@ -91,7 +96,7 @@ export default function ChatPage() {
     }]);
   };
 
-  const send = async (content: string, appendUser = true) => {
+  const send = async (content: string, appendUser = true, locationContext?: BrowserLocation, resumeNavigation = false) => {
     if ((!content.trim() && !attachment) || busy) return;
     if (!agentStatus?.llm_configured && !attachment) { setError("后端已连接，但尚未配置大模型密钥。"); return; }
     const file = attachment;
@@ -111,13 +116,30 @@ export default function ChatPage() {
     const controller = new AbortController(); abortRef.current = controller;
     try {
       await streamAgentChat(
-        { message: content, conversation_id: conversationId, campus_id: user?.campus_id },
+        {
+          message: content,
+          conversation_id: conversationId,
+          campus_id: user?.campus_id,
+          location_context: locationContext,
+          resume_navigation: resumeNavigation,
+        },
         ({ event, data }) => {
           if (event === "stage") setStage(String(data.label || "正在处理"));
           if (event === "token") setMessages((current) => current.map((item) => item.id === streamingId ? { ...item, content: item.content + String(data.content || "") } : item));
           if (event === "final") {
             const result = data as unknown as ChatResponse;
             setConversationId(result.conversation_id);
+            if (result.map_action?.type === "request_location" && result.map_action.destination_location_id) {
+              setPendingNavigation({
+                destinationId: result.map_action.destination_location_id,
+                destinationName: String(result.locations?.[0]?.name || "目的地"),
+                message: content,
+              });
+              setLocationSheetOpen(true);
+            } else if (resumeNavigation) {
+              setPendingNavigation(null);
+              setLocationSheetOpen(false);
+            }
             setMessages((current) => current.map((item) => item.id === streamingId ? {
               id: result.message_id, role: "assistant", content: result.answer, intent: result.intent,
               tool_results: result.tool_results, sources: result.sources, map_action: result.map_action,
@@ -136,6 +158,28 @@ export default function ChatPage() {
         setError(reason instanceof Error ? reason.message : "消息发送失败"); setFailedMessage(content);
       }
     } finally { abortRef.current = null; setBusy(false); setStage(""); }
+  };
+
+  const allowLocation = async () => {
+    if (!pendingNavigation) return;
+    try {
+      const position = await geolocation.locate();
+      const accuracy = locationAccuracy(position.accuracy);
+      if (accuracy.status === "low") {
+        setError(accuracy.message);
+        return;
+      }
+      setLocationSheetOpen(false);
+      await send(pendingNavigation.message, false, position, true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "定位失败，请选择其他起点");
+    }
+  };
+
+  const chooseManualOrigin = () => {
+    if (!pendingNavigation) return;
+    setLocationSheetOpen(false);
+    navigate(`/map?destination=${encodeURIComponent(pendingNavigation.destinationId)}&manual_origin=1`);
   };
 
   const submit = (event: FormEvent) => {
@@ -172,7 +216,12 @@ export default function ChatPage() {
 
         {!agentStatus?.llm_configured && agentStatus && <div className="model-warning" role="status">后端已连接，但尚未配置大模型密钥。<button onClick={() => void loadAgentStatus()}>重新检查</button></div>}
         <div className="message-list" aria-live="polite">
-          {messages.map((message) => <MessageView key={message.id} message={message} userInitial={(user?.nickname || "我").slice(0, 1)} />)}
+          {messages.map((message) => <MessageView key={message.id} message={message} userInitial={(user?.nickname || "我").slice(0, 1)} onRequestLocation={() => {
+            if (message.map_action?.destination_location_id) {
+              setPendingNavigation({ destinationId: message.map_action.destination_location_id, destinationName: "目的地", message: [...messages].reverse().find((item) => item.role === "user")?.content || "怎么走？" });
+            }
+            setLocationSheetOpen(true);
+          }} />)}
           {busy && stage && <div className="agent-progress" role="status"><span /><span /><span />{stage}</div>}
           <div ref={endRef} />
         </div>
@@ -190,14 +239,22 @@ export default function ChatPage() {
           <div className="composer-meta"><span>Enter 发送 · Shift+Enter 换行 · 可拖入 TXT/PDF</span>{lastUserMessage && !busy && <button type="button" onClick={() => void send(lastUserMessage.content, false)}>重新生成</button>}</div>
         </form>
       </div>
+      <LocationPermissionSheet
+        open={locationSheetOpen}
+        destinationName={pendingNavigation?.destinationName}
+        locating={geolocation.locating || busy}
+        onAllow={() => void allowLocation()}
+        onManual={chooseManualOrigin}
+        onClose={() => setLocationSheetOpen(false)}
+      />
     </section>
   );
 }
 
-function MessageView({ message, userInitial }: { message: ChatMessage; userInitial: string }) {
+function MessageView({ message, userInitial, onRequestLocation }: { message: ChatMessage; userInitial: string; onRequestLocation: () => void }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => { await navigator.clipboard?.writeText(message.content); setCopied(true); window.setTimeout(() => setCopied(false), 1200); };
-  return <article className={`message ${message.role}`}><div className="message-avatar">{message.role === "assistant" ? "广" : userInitial}</div><div className="message-column"><div className="message-body">{message.content ? <MarkdownMessage content={message.content} /> : <span className="typing-cursor" />}{message.data_status === "needs_verification" && <div className="data-caution">部分校园资料仍待核验，回答中已保留状态说明。</div>}{message.tool_results?.map((tool, index) => <ToolCard tool={tool} key={`${message.id}-${index}`} />)}{message.map_action && <Link className="inline-action" to={message.map_action.url}>{message.map_action.type === "route" ? "在地图中查看路线" : "在地图中查看"}</Link>}{message.sources && message.sources.length > 0 && <details className="execution-details"><summary>查看来源</summary>{message.sources.map((source, index) => <a href={source.url || undefined} target="_blank" rel="noreferrer" key={`${source.url}-${index}`}>{source.title || "来源"}{source.published_at ? ` · ${new Date(source.published_at).toLocaleDateString("zh-CN")}` : ""}</a>)}</details>}</div>{message.content && <button className="message-copy" onClick={() => void copy()}>{copied ? "已复制" : "复制"}</button>}</div></article>;
+  return <article className={`message ${message.role}`}><div className="message-avatar">{message.role === "assistant" ? "广" : userInitial}</div><div className="message-column"><div className="message-body">{message.content ? <MarkdownMessage content={message.content} /> : <span className="typing-cursor" />}{message.data_status === "needs_verification" && <div className="data-caution">部分校园资料仍待核验，回答中已保留状态说明。</div>}{message.tool_results?.map((tool, index) => <ToolCard tool={tool} key={`${message.id}-${index}`} />)}{message.map_action?.type === "request_location" && <button className="inline-action" onClick={onRequestLocation}>⌖ 使用当前位置规划</button>}{message.map_action?.url && message.map_action.type !== "request_location" && <Link className="inline-action" to={message.map_action.url}>{["route", "client_route"].includes(message.map_action.type) ? "在地图中查看路线" : "在地图中查看"}</Link>}{message.sources && message.sources.length > 0 && <details className="execution-details"><summary>查看来源</summary>{message.sources.map((source, index) => <a href={source.url || undefined} target="_blank" rel="noreferrer" key={`${source.url}-${index}`}>{source.title || "来源"}{source.published_at ? ` · ${new Date(source.published_at).toLocaleDateString("zh-CN")}` : ""}</a>)}</details>}</div>{message.content && <button className="message-copy" onClick={() => void copy()}>{copied ? "已复制" : "复制"}</button>}</div></article>;
 }
 
 function ToolCard({ tool }: { tool: ToolResult }) {

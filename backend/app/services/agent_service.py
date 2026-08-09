@@ -395,16 +395,35 @@ class AgentService:
         ]
         return await self.llm.chat_completion(messages, temperature=0.6)
 
-    async def chat(self, user: User, message: str, conversation_id: str | None, campus_id: str | None) -> AgentChatResponse:
+    async def chat(
+        self,
+        user: User,
+        message: str,
+        conversation_id: str | None,
+        campus_id: str | None,
+        location_context=None,
+        resume_navigation: bool = False,
+    ) -> AgentChatResponse:
         from app.agents.orchestrator import AgentOrchestrator
 
         return await AgentOrchestrator(self.db, self.llm, self).run(
-            user, message, conversation_id, campus_id
+            user, message, conversation_id, campus_id, location_context=location_context,
+            resume_navigation=resume_navigation,
         )
 
-    async def chat_stream(self, user: User, message: str, conversation_id: str | None, campus_id: str | None, on_event) -> AgentChatResponse:
+    async def chat_stream(
+        self,
+        user: User,
+        message: str,
+        conversation_id: str | None,
+        campus_id: str | None,
+        on_event,
+        location_context=None,
+        resume_navigation: bool = False,
+    ) -> AgentChatResponse:
         from app.agents.orchestrator import AgentOrchestrator
 
         return await AgentOrchestrator(self.db, self.llm, self).run(
-            user, message, conversation_id, campus_id, on_event=on_event
+            user, message, conversation_id, campus_id, on_event=on_event,
+            location_context=location_context, resume_navigation=resume_navigation,
         )

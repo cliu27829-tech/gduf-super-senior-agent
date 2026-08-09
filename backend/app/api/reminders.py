@@ -6,19 +6,33 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import select
 
 from app.core.dependencies import CurrentUser, DbSession
-from app.models.entities import Note, Reminder, Task, utcnow
+from app.models.entities import Location, Note, Reminder, Task, utcnow
 from app.schemas.reminders import ReminderCreate, ReminderPreview, ReminderPreviewRequest, ReminderRead, ReminderUpdate
 from app.services.time_service import now_china, parse_relative_datetime
+from app.services.ownership import get_owned_reminder
 
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
 
 
 def _owned(db: DbSession, reminder_id: str, user_id: str) -> Reminder:
-    row = db.scalar(select(Reminder).where(Reminder.id == reminder_id, Reminder.user_id == user_id))
-    if not row:
-        raise HTTPException(status_code=404, detail="提醒不存在")
-    return row
+    return get_owned_reminder(db, reminder_id, user_id)
+
+
+def _read(db: DbSession, row: Reminder) -> ReminderRead:
+    location_id = None
+    location_name = ""
+    if row.task_id:
+        task = db.scalar(select(Task).where(Task.id == row.task_id, Task.user_id == row.user_id))
+        if task:
+            location_id = task.location_id
+            location_name = task.location
+            if location_id:
+                location = db.get(Location, location_id)
+                location_name = location.name if location else location_name
+    return ReminderRead.model_validate(row).model_copy(
+        update={"location_id": location_id, "location_name": location_name}
+    )
 
 
 def _validate_links(db: DbSession, user_id: str, task_id: str | None, note_id: str | None) -> None:
@@ -51,15 +65,15 @@ def list_reminders(
     db: DbSession,
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
-) -> list[Reminder]:
+) -> list[ReminderRead]:
     query = select(Reminder).where(Reminder.user_id == user.id)
     if status_filter:
         query = query.where(Reminder.status == status_filter)
-    return list(db.scalars(query.order_by(Reminder.remind_at).limit(limit)))
+    return [_read(db, row) for row in db.scalars(query.order_by(Reminder.remind_at).limit(limit))]
 
 
 @router.post("", response_model=ReminderRead, status_code=status.HTTP_201_CREATED)
-def create_reminder(payload: ReminderCreate, user: CurrentUser, db: DbSession) -> Reminder:
+def create_reminder(payload: ReminderCreate, user: CurrentUser, db: DbSession) -> ReminderRead:
     if not payload.confirmed:
         raise HTTPException(status_code=422, detail="创建提醒前必须明确确认")
     _validate_links(db, user.id, payload.task_id, payload.note_id)
@@ -80,11 +94,11 @@ def create_reminder(payload: ReminderCreate, user: CurrentUser, db: DbSession) -
     db.add(row)
     db.commit()
     db.refresh(row)
-    return row
+    return _read(db, row)
 
 
 @router.post("/check", response_model=list[ReminderRead])
-def check_due_reminders(user: CurrentUser, db: DbSession) -> list[Reminder]:
+def check_due_reminders(user: CurrentUser, db: DbSession) -> list[ReminderRead]:
     rows = list(db.scalars(select(Reminder).where(
         Reminder.user_id == user.id,
         Reminder.status == "scheduled",
@@ -98,11 +112,16 @@ def check_due_reminders(user: CurrentUser, db: DbSession) -> list[Reminder]:
         db.commit()
         for row in rows:
             db.refresh(row)
-    return rows
+    return [_read(db, row) for row in rows]
+
+
+@router.get("/{reminder_id}", response_model=ReminderRead)
+def get_reminder(reminder_id: str, user: CurrentUser, db: DbSession) -> ReminderRead:
+    return _read(db, _owned(db, reminder_id, user.id))
 
 
 @router.patch("/{reminder_id}", response_model=ReminderRead)
-def update_reminder(reminder_id: str, payload: ReminderUpdate, user: CurrentUser, db: DbSession) -> Reminder:
+def update_reminder(reminder_id: str, payload: ReminderUpdate, user: CurrentUser, db: DbSession) -> ReminderRead:
     if not payload.confirmed:
         raise HTTPException(status_code=422, detail="修改提醒前必须明确确认")
     row = _owned(db, reminder_id, user.id)
@@ -115,7 +134,7 @@ def update_reminder(reminder_id: str, payload: ReminderUpdate, user: CurrentUser
         row.dismissed_at = utcnow()
     db.commit()
     db.refresh(row)
-    return row
+    return _read(db, row)
 
 
 @router.delete("/{reminder_id}", status_code=status.HTTP_204_NO_CONTENT)

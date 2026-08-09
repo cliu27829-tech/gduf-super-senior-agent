@@ -10,6 +10,7 @@ class TaskBase(BaseModel):
     description: str = Field(default="", max_length=5000)
     deadline: datetime | None = None
     location: str = Field(default="", max_length=255)
+    location_id: str | None = None
     course: str = Field(default="", max_length=120)
     task_type: str = Field(default="general", max_length=80)
     materials: list[str] = Field(default_factory=list, max_length=50)
@@ -36,6 +37,7 @@ class TaskUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=5000)
     deadline: datetime | None = None
     location: str | None = Field(default=None, max_length=255)
+    location_id: str | None = None
     course: str | None = Field(default=None, max_length=120)
     task_type: str | None = Field(default=None, max_length=80)
     materials: list[str] | None = None
@@ -60,6 +62,7 @@ class TaskRead(BaseModel):
     description: str
     deadline: datetime | None
     location: str
+    location_id: str | None
     course: str
     task_type: str
     materials: list[str]

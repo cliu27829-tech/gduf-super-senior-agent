@@ -2,6 +2,7 @@ import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { AuthProvider } from "../auth";
+import { LocationProvider } from "../location";
 
 export const campus = {
   id: "campus-gz",
@@ -51,7 +52,7 @@ export function routeFetch(
 export function renderAt(path: string, children: ReactNode) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider><LocationProvider>{children}</LocationProvider></AuthProvider>
     </MemoryRouter>,
   );
 }

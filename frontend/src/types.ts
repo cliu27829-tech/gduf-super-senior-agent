@@ -113,6 +113,7 @@ export type Task = {
   description: string;
   deadline: string | null;
   location: string;
+  location_id: string | null;
   course: string;
   task_type: string;
   materials: string[];
@@ -137,6 +138,8 @@ export type Reminder = {
   user_id: string;
   task_id: string | null;
   note_id: string | null;
+  location_id: string | null;
+  location_name: string;
   title: string;
   body: string;
   remind_at: string;

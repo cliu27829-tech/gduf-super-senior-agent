@@ -1,22 +1,22 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&family=Noto+Serif+SC:wght@600;700&display=swap");
+@import "./styles/tokens.css";
 
 :root {
   font-family: "Noto Sans SC", system-ui, sans-serif;
   color: #10243a;
   background: #f7f5ef;
   font-synthesis: none;
-  --ink: #10243a;
-  --navy: #0b2d4f;
-  --navy-light: #164c78;
-  --gold: #d09a2d;
-  --gold-pale: #f4e5b9;
-  --paper: #fffdf8;
-  --mist: #e8edf0;
-  --muted: #617181;
-  --danger: #a53a34;
-  --success: #267255;
-  --border: #d9dedf;
-  --shadow: 0 18px 50px rgba(11, 45, 79, 0.09);
+  --ink: var(--text-primary);
+  --navy: var(--brand-primary);
+  --navy-light: var(--brand-primary-hover);
+  --gold: var(--brand-accent);
+  --gold-pale: var(--brand-accent-soft);
+  --paper: var(--surface);
+  --mist: var(--surface-muted);
+  --muted: var(--text-secondary);
+  --danger: var(--status-danger);
+  --success: var(--status-success);
+  --border: var(--border-subtle);
+  --shadow: var(--shadow-lg);
 }
 
 .real-map-shell { position: relative; min-height: 520px; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: #eef3ed; }

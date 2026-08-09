@@ -36,13 +36,9 @@ test("registers and completes the three real MVP workflows", async ({ page, requ
   await page.getByRole("button", { name: "注册并登录" }).click();
   await expect(page.getByRole("heading", { name: /端到端同学，今天先做哪一件/ })).toBeVisible();
 
-  // Vite imports the public Google Fonts stylesheet. In a restricted test
-  // network the stylesheet can keep DOMContentLoaded pending even though the
-  // SPA has already committed and rendered, so persistence is asserted from
-  // the rendered dashboard after the navigation commit.
   await page.reload({ waitUntil: "commit" });
   await expect(page.getByRole("heading", { name: /端到端同学，今天先做哪一件/ })).toBeVisible();
-  await page.getByRole("link", { name: "问师兄" }).first().click();
+  await page.getByRole("link", { name: "问大师兄" }).first().click();
   await expect(page.getByRole("heading", { name: "问问大师兄" })).toBeVisible();
   await expect(page.locator(".connection-dot.online")).toBeVisible();
   await expect(page.locator(".message.assistant")).toHaveCount(1);
@@ -83,7 +79,7 @@ test("registers and completes the three real MVP workflows", async ({ page, requ
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /北苑饭堂/ })).toBeVisible();
 
-  await page.getByRole("link", { name: "办事流程" }).first().click();
+  await page.goto("/processes", { waitUntil: "commit" });
   await page.getByRole("button", { name: /校园卡丢失挂失与补卡/ }).click();
   await expect(page.getByText("校园卡办理流程")).toBeVisible();
   const processTasksResponse = page.waitForResponse((response) =>
@@ -93,7 +89,7 @@ test("registers and completes the three real MVP workflows", async ({ page, requ
   expect((await processTasksResponse).ok()).toBe(true);
   await expect(page.getByText(/已保存 \d+ 条任务/)).toBeVisible();
 
-  await page.getByRole("link", { name: "处理通知" }).first().click();
+  await page.getByRole("link", { name: "通知" }).first().click();
   await page.getByLabel("通知原文").fill("请各班同学于2099年9月3日下午5点前提交学生信息表，文件命名为学号+姓名，发送给班长。材料：学生信息表");
   await page.getByRole("button", { name: "解析通知" }).click();
   const title = page.getByLabel("任务标题").first();
@@ -123,11 +119,11 @@ test("registers and completes the three real MVP workflows", async ({ page, requ
   expect(ics).toContain("班群文件");
 
   await page.getByRole("button", { name: "退出" }).click();
-  await expect(page.getByRole("heading", { name: "继续处理你的校园事项" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "校园里的事情，接着交给大师兄。" })).toBeVisible();
   await page.getByLabel("邮箱").fill(email);
   await page.getByLabel(/^密码/).fill(password);
   await page.getByRole("button", { name: "登录" }).click();
-  await page.getByRole("link", { name: "任务中心" }).first().click();
+  await page.getByRole("link", { name: "任务" }).first().click();
   await expect(page.getByText("E2E 已编辑任务", { exact: true })).toBeVisible();
 
   await page.locator("article.task-table-row").filter({ hasText: "E2E 已编辑任务" }).getByRole("button", { name: "删除" }).click();

@@ -418,6 +418,9 @@ class Task(Base, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, default="")
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     location: Mapped[str] = mapped_column(String(255), default="")
+    location_id: Mapped[str | None] = mapped_column(
+        ForeignKey("locations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     course: Mapped[str] = mapped_column(String(120), default="")
     task_type: Mapped[str] = mapped_column(String(80), default="general")
     materials: Mapped[list[str]] = mapped_column(JSON, default=list)

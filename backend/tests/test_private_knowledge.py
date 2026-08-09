@@ -64,6 +64,11 @@ def test_private_import_dedup_search_isolation_and_admin_review(client, register
         "/api/knowledge/search", params={"q": "奖学金申请", "campus_id": campus_id}
     ).json())
 
+    _login(client, owner)
+    submitted = client.post(f"/api/knowledge/sources/{source_id}/submit-review?confirmed=true")
+    assert submitted.status_code == 200
+    assert submitted.json()["review_status"] == "pending"
+
     login_admin()
     reviewed = client.patch(f"/api/knowledge/admin/sources/{source_id}/review", json={
         "status": "approved",

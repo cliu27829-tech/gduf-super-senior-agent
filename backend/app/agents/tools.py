@@ -18,6 +18,7 @@ from app.models.entities import (
 )
 from app.services.ics_service import generate_ics
 from app.services.map_service import MapService, MapServiceError
+from app.services.location_resolver import resolve_location
 from app.services.knowledge_service import (
     KnowledgeImportError,
     create_import_job,
@@ -44,7 +45,8 @@ def _source(source: Source | None) -> dict[str, Any] | None:
 def _task_data(task: Task) -> dict[str, Any]:
     return {
         "id": task.id, "user_id": task.user_id, "title": task.title, "description": task.description,
-        "deadline": task.deadline, "location": task.location, "course": task.course, "task_type": task.task_type,
+        "deadline": task.deadline, "location": task.location, "location_id": task.location_id,
+        "course": task.course, "task_type": task.task_type,
         "materials": task.materials, "submission_target": task.submission_target,
         "submission_method": task.submission_method, "file_naming": task.file_naming,
         "conditions": task.conditions, "evidence_requirements": task.evidence_requirements,
@@ -383,9 +385,16 @@ class AgentToolbox:
     def create_task(self, confirmed: bool = False, **fields: Any) -> ToolResponse:
         if not confirmed:
             return self._confirmation("create_task", "创建任务前需要用户确认", fields)
-        allowed = {key: value for key, value in fields.items() if key in {"title", "description", "deadline", "location", "course", "task_type", "materials", "submission_target", "submission_method", "file_naming", "source_text", "source_url"}}
+        allowed = {key: value for key, value in fields.items() if key in {"title", "description", "deadline", "location", "location_id", "course", "task_type", "materials", "submission_target", "submission_method", "file_naming", "source_text", "source_url"}}
         if not str(allowed.get("title") or "").strip():
             return ToolResponse(tool_name="create_task", success=False, error="invalid_title", summary="任务标题不能为空")
+        location = resolve_location(
+            self.db,
+            self.user,
+            location_id=allowed.get("location_id"),
+            location_text=str(allowed.get("location") or ""),
+        )
+        allowed["location_id"] = location.id if location else None
         task = Task(user_id=self.user.id, **allowed)
         self.db.add(task); self.db.flush()
         self.db.add_all([TaskReminder(task_id=task.id, minutes_before=1440), TaskReminder(task_id=task.id, minutes_before=180)])
@@ -420,8 +429,18 @@ class AgentToolbox:
         row = self._owned_task(task_id)
         if not row:
             return ToolResponse(tool_name="update_task", success=False, error="not_found", summary="任务不存在")
+        if "location_id" in changes or "location" in changes:
+            location = resolve_location(
+                self.db,
+                self.user,
+                location_id=changes.get("location_id"),
+                location_text=str(changes.get("location", row.location) or ""),
+            )
+            changes["location_id"] = location.id if location else None
+            if location and not changes.get("location"):
+                changes["location"] = location.name
         for key, value in changes.items():
-            if key in {"title", "description", "deadline", "location", "course", "task_type", "materials", "submission_target", "submission_method", "file_naming", "source_text", "source_url"}:
+            if key in {"title", "description", "deadline", "location", "location_id", "course", "task_type", "materials", "submission_target", "submission_method", "file_naming", "source_text", "source_url"}:
                 setattr(row, key, value)
         self.db.commit(); self.db.refresh(row)
         return self._ok("update_task", _task_data(row), "任务已更新", verification={"persisted": True, "confirmed": True})

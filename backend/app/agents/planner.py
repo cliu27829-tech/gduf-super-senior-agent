@@ -110,6 +110,12 @@ class Planner:
                 by_tool.setdefault("calculate_walking_route", AgentPlanStep(tool="calculate_walking_route", purpose="使用核验坐标或校内路径图计算路线", arguments={}))
                 order = ["search_campus_locations", "list_canteens", "search_express_locations", "calculate_walking_route"]
                 valid_steps = [by_tool[name] for name in order if name in by_tool][:4]
+            # A model may repeat the same read tool in multiple plan steps. The
+            # duplicate adds no evidence and produces duplicate cards/calls.
+            unique_steps: dict[str, AgentPlanStep] = {}
+            for step in valid_steps:
+                unique_steps.setdefault(step.tool, step)
+            valid_steps = list(unique_steps.values())
             plan.steps = valid_steps
             plan.required_tools = list(dict.fromkeys(step.tool for step in valid_steps))
             plan.agent_round = 1

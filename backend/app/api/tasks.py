@@ -10,6 +10,8 @@ from app.core.dependencies import CurrentUser, DbSession
 from app.models.entities import Task, TaskReminder, utcnow
 from app.schemas.tasks import BulkTaskAction, TaskCreate, TaskRead, TaskUpdate
 from app.services.ics_service import generate_ics
+from app.services.location_resolver import resolve_location
+from app.services.ownership import get_owned_task
 from app.services.time_service import now_china
 
 
@@ -17,10 +19,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 def _owned(db: DbSession, task_id: str, user_id: str) -> Task:
-    task = db.scalar(select(Task).where(Task.id == task_id, Task.user_id == user_id))
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
-    return task
+    return get_owned_task(db, task_id, user_id)
 
 
 @router.get("/export/ics")
@@ -34,6 +33,8 @@ def export_ics(
     if task_ids:
         query = query.where(Task.id.in_(task_ids))
     tasks = list(db.scalars(query))
+    if task_ids and {task.id for task in tasks} != set(task_ids):
+        raise HTTPException(status_code=404, detail="部分任务不存在")
     minutes = [max(1, min(hour, 24 * 30)) * 60 for hour in reminder_hours]
     payload = generate_ics(tasks, minutes)
     filename = f"gduf-tasks-{uuid4().hex}.ics"
@@ -79,6 +80,10 @@ def create_task(payload: TaskCreate, user: CurrentUser, db: DbSession) -> Task:
     if not payload.confirmed:
         raise HTTPException(status_code=422, detail="创建任务前必须明确确认")
     data = payload.model_dump(exclude={"confirmed", "reminder_minutes"})
+    location = resolve_location(db, user, location_id=data.get("location_id"), location_text=data.get("location") or "")
+    data["location_id"] = location.id if location else None
+    if location and not data.get("location"):
+        data["location"] = location.name
     task = Task(user_id=user.id, **data)
     db.add(task)
     db.flush()
@@ -120,7 +125,16 @@ def update_task(task_id: str, payload: TaskUpdate, user: CurrentUser, db: DbSess
     if not payload.confirmed:
         raise HTTPException(status_code=422, detail="修改任务前必须明确确认")
     task = _owned(db, task_id, user.id)
-    for key, value in payload.model_dump(exclude_unset=True, exclude={"confirmed"}).items():
+    changes = payload.model_dump(exclude_unset=True, exclude={"confirmed"})
+    if "location_id" in changes or "location" in changes:
+        location = resolve_location(
+            db,
+            user,
+            location_id=changes.get("location_id"),
+            location_text=changes.get("location", task.location) or "",
+        )
+        changes["location_id"] = location.id if location else None
+    for key, value in changes.items():
         setattr(task, key, value)
     if task.status == "completed" and not task.completed_at:
         task.completed_at = utcnow()

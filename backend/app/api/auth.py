@@ -45,8 +45,14 @@ def _set_cookies(response: Response, access: str, refresh: str) -> None:
 
 
 def _clear_cookies(response: Response) -> None:
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/api/auth")
+    settings = get_settings()
+    common = {
+        "secure": settings.cookie_secure,
+        "samesite": settings.cookie_samesite,
+        "httponly": True,
+    }
+    response.delete_cookie("access_token", path="/", **common)
+    response.delete_cookie("refresh_token", path="/api/auth", **common)
 
 
 def _issue_tokens(db: DbSession, user: User, response: Response) -> AuthResponse:
@@ -67,7 +73,9 @@ def _issue_tokens(db: DbSession, user: User, response: Response) -> AuthResponse
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, request: Request, response: Response, db: DbSession) -> AuthResponse:
-    auth_limiter.check(f"register:{request.client.host if request.client else 'unknown'}", 5, 300)
+    # Campus networks commonly place many students behind one public IP;
+    # keep a short burst limit without blocking a small shared-NAT group.
+    auth_limiter.check(f"register:{request.client.host if request.client else 'unknown'}", 10, 300)
     email = payload.email.lower()
     existing = db.scalar(
         select(User).where(or_(func.lower(User.email) == email, func.lower(User.username) == payload.username.lower()))

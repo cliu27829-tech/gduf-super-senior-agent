@@ -26,7 +26,7 @@ describe("public and route guards", () => {
       "/api/campuses": [campus],
     }));
     renderAt("/tasks", <App />);
-    expect(await screen.findByRole("heading", { name: "继续处理你的校园事项" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "校园里的事情，接着交给大师兄。" })).toBeInTheDocument();
   });
 
   it("renders registration fields and the selected campus", async () => {
@@ -35,7 +35,7 @@ describe("public and route guards", () => {
       "/api/campuses": [campus],
     }));
     renderAt("/register", <App />);
-    expect(await screen.findByRole("heading", { name: "先选校区，再把事情办明白" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "从今天起，把校园事项理清楚。" })).toBeInTheDocument();
     expect(screen.getByLabelText("邮箱")).toBeInTheDocument();
     expect(screen.getByLabelText(/^密码/)).toBeInTheDocument();
     expect(await screen.findByRole("option", { name: "广州校本部" })).toBeInTheDocument();
@@ -173,7 +173,7 @@ describe("campus workflows", () => {
     renderAt("/map", <App />);
     expect(await screen.findByRole("heading", { name: "需要配置高德地图凭据" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /图书馆.*东区/ })).toBeInTheDocument();
-    await userEvent.type(screen.getByPlaceholderText(/搜索教学楼/), "图书");
+    await userEvent.type(screen.getByPlaceholderText(/搜索北教/), "图书");
     expect(screen.queryByText("校园超市")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /图书馆.*东区/ }));
     expect(screen.getByRole("complementary", { name: "地点详情" })).toBeInTheDocument();

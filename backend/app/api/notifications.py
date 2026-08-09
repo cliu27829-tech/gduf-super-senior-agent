@@ -13,6 +13,7 @@ from app.models.entities import Reminder, Task, TaskReminder, UploadedDocument
 from app.schemas.agent import NotificationConfirmRequest, NotificationParseResponse
 from app.schemas.tasks import TaskRead
 from app.services.notification_service import NotificationService
+from app.services.location_resolver import resolve_location
 from app.services.time_service import now_china
 
 
@@ -75,11 +76,13 @@ def confirm_notification(payload: NotificationConfirmRequest, user: CurrentUser,
         raise HTTPException(status_code=422, detail="通知已经过期，默认不保存；如仍需补交，请手动确认保存过期任务")
     tasks: list[Task] = []
     for item in payload.action_items:
+        location = resolve_location(db, user, location_text=item.location)
         task = Task(
             user_id=user.id,
             title=item.title,
             deadline=item.deadline,
             location=item.location,
+            location_id=location.id if location else None,
             description="\n".join([item.action, *item.notes]).strip(),
             materials=item.materials,
             submission_target=item.submission_target,

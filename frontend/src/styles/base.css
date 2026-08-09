@@ -1,0 +1,12 @@
+:root { color-scheme: light; }
+body {
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(165, 28, 48, .045), transparent 30rem),
+    var(--surface-muted);
+}
+::selection { color: #fff; background: var(--brand-primary); }
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}

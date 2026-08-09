@@ -68,6 +68,23 @@ def test_reminder_plan_cannot_bypass_confirmation_preview():
     assert [step.tool for step in plan.steps] == ["preview_reminder"]
 
 
+def test_model_plan_deduplicates_repeated_read_tools():
+    class DuplicatePlannerLLM:
+        async def chat_completion(self, *_args, **_kwargs):
+            return (
+                '{"intent":"canteen_search","goal":"找饭堂","steps":'
+                '[{"tool":"list_canteens","purpose":"查询","arguments":{}},'
+                '{"tool":"list_canteens","purpose":"再次查询","arguments":{}}],'
+                '"required_tools":["list_canteens"],"requires_knowledge":true,'
+                '"requires_confirmation":false,"missing_information":[],"risk_level":"low",'
+                '"risks":[],"agent_round":1}'
+            )
+
+    decision = IntentDecision(intent="canteen_search", confidence=0.99, query="北饭在哪里", tool_plan=["list_canteens"])
+    plan = asyncio.run(Planner(DuplicatePlannerLLM()).build(decision, decision.query))
+    assert [step.tool for step in plan.steps] == ["list_canteens"]
+
+
 def test_note_crud_and_ownership(client: TestClient, register_user):
     register_user("note-owner")
     created = client.post("/api/notes", json={"title": "高数复习", "content": "先补极限", "tags": ["学习"], "confirmed": True})

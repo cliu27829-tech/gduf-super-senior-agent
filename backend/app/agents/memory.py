@@ -8,6 +8,7 @@ from app.agents.persona import preferred_address
 from app.core.config import get_settings
 from app.models.entities import Campus, Conversation, Message, Task, User
 from app.services.time_service import now_china
+from app.services.ownership import get_owned_conversation
 
 
 class Memory:
@@ -18,12 +19,7 @@ class Memory:
     def conversation(self, user: User, conversation_id: str | None, campus_id: str | None, title: str) -> Conversation:
         row = None
         if conversation_id:
-            row = self.db.scalar(select(Conversation).where(
-                Conversation.id == conversation_id, Conversation.user_id == user.id
-            ))
-            if not row:
-                from fastapi import HTTPException
-                raise HTTPException(status_code=404, detail="对话不存在")
+            row = get_owned_conversation(self.db, conversation_id, user.id)
         if not row:
             row = Conversation(user_id=user.id, campus_id=campus_id or user.campus_id, title=title[:60])
             self.db.add(row)

@@ -8,16 +8,14 @@ from sqlalchemy import or_, select
 from app.core.dependencies import CurrentUser, DbSession
 from app.models.entities import Conversation, Message, Note
 from app.schemas.notes import NoteCreate, NotePreview, NotePreviewRequest, NoteRead, NoteUpdate
+from app.services.ownership import get_owned_note
 
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
 def _owned(db: DbSession, note_id: str, user_id: str) -> Note:
-    row = db.scalar(select(Note).where(Note.id == note_id, Note.user_id == user_id))
-    if not row:
-        raise HTTPException(status_code=404, detail="便签不存在")
-    return row
+    return get_owned_note(db, note_id, user_id)
 
 
 def _validate_source(db: DbSession, user_id: str, source_message_id: str | None) -> None:
@@ -68,6 +66,11 @@ def create_note(payload: NoteCreate, user: CurrentUser, db: DbSession) -> Note:
     db.commit()
     db.refresh(row)
     return row
+
+
+@router.get("/{note_id}", response_model=NoteRead)
+def get_note(note_id: str, user: CurrentUser, db: DbSession) -> Note:
+    return _owned(db, note_id, user.id)
 
 
 @router.patch("/{note_id}", response_model=NoteRead)

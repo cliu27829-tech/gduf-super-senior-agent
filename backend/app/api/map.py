@@ -1,17 +1,37 @@
 from __future__ import annotations
 
+from math import asin, cos, radians, sin, sqrt
 from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import select
 
 from app.core.config import Settings, get_settings
-from app.core.dependencies import CurrentUser
+from app.core.dependencies import CurrentUser, DbSession
+from app.models.entities import Location
+from app.schemas.map import RouteFromCurrentRequest, RouteFromCurrentResponse
 from app.services.map_service import MapService, MapServiceError
 
 
 router = APIRouter(prefix="/map", tags=["map"])
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
+
+
+def _distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius = 6_371_000
+    d_lat = radians(lat2 - lat1)
+    d_lon = radians(lon2 - lon1)
+    value = sin(d_lat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lon / 2) ** 2
+    return 2 * radius * asin(sqrt(value))
+
+
+def _accuracy(accuracy: float) -> tuple[str, str]:
+    if accuracy <= 30:
+        return "accurate", "定位较准确"
+    if accuracy <= 100:
+        return "approximate", f"当前位置存在约 {round(accuracy)} 米偏差"
+    return "low", "当前定位精度不太够，可以重新定位或手动选择起点。"
 
 
 @router.get("/status")
@@ -49,6 +69,55 @@ async def walking_route(
         )
     except MapServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.public_message) from exc
+
+
+@router.post("/route-from-current", response_model=RouteFromCurrentResponse)
+async def route_from_current(payload: RouteFromCurrentRequest, _user: CurrentUser, db: DbSession) -> dict:
+    accuracy_status, accuracy_message = _accuracy(payload.origin.accuracy)
+    if accuracy_status == "low":
+        raise HTTPException(status_code=422, detail=accuracy_message)
+    destination = db.scalar(
+        select(Location).where(
+            Location.id == payload.destination_location_id,
+            Location.is_active.is_(True),
+            Location.data_status != "demo_fixture",
+        )
+    )
+    if not destination:
+        raise HTTPException(status_code=404, detail="目的地不存在")
+    if (
+        destination.latitude is None
+        or destination.longitude is None
+        or destination.coordinate_accuracy != "exact"
+        or destination.coordinate_verified_at is None
+    ):
+        raise HTTPException(status_code=422, detail="目的地尚无经过核验的精确坐标，不能直接导航")
+    try:
+        route = await MapService.configured().walking_route(
+            payload.origin.longitude,
+            payload.origin.latitude,
+            float(destination.longitude),
+            float(destination.latitude),
+        )
+    except MapServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.public_message) from exc
+    off_campus = _distance_meters(
+        payload.origin.latitude,
+        payload.origin.longitude,
+        float(destination.latitude),
+        float(destination.longitude),
+    ) > 5_000
+    return {
+        **route,
+        "origin": payload.origin,
+        "destination_location_id": destination.id,
+        "destination_name": destination.name,
+        "destination_longitude": float(destination.longitude),
+        "destination_latitude": float(destination.latitude),
+        "accuracy_status": accuracy_status,
+        "accuracy_message": accuracy_message,
+        "off_campus": off_campus,
+    }
 
 
 @router.api_route("/_AMapService/{path:path}", methods=["GET"])

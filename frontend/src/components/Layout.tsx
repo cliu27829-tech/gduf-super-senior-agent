@@ -5,21 +5,22 @@ import { useAuth } from "../auth";
 import type { Reminder } from "../types";
 
 const navItems = [
-  ["/dashboard", "工作台"],
-  ["/chat", "问师兄"],
+  ["/dashboard", "首页"],
+  ["/chat", "问大师兄"],
   ["/map", "校园地图"],
-  ["/canteens", "饭堂"],
-  ["/notifications", "处理通知"],
-  ["/tasks", "任务中心"],
-  ["/processes", "办事流程"],
+  ["/notifications", "通知"],
+  ["/tasks", "任务"],
 ];
 
-function Navigation() {
+const lifeItems = [["/canteens", "饭堂"], ["/processes", "办事流程"]];
+
+function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="main-nav" aria-label="主导航">
       {navItems.map(([path, label]) => (
-        <NavLink key={path} to={path} className={({ isActive }) => isActive ? "active" : ""}>{label}</NavLink>
+        <NavLink key={path} to={path} onClick={onNavigate} className={({ isActive }) => isActive ? "active" : ""}>{label}</NavLink>
       ))}
+      <details className="nav-menu"><summary>校园生活 <span aria-hidden="true">⌄</span></summary><div>{lifeItems.map(([path, label]) => <NavLink key={path} to={path} onClick={onNavigate} className={({ isActive }) => isActive ? "active" : ""}>{label}</NavLink>)}</div></details>
     </nav>
   );
 }
@@ -27,6 +28,8 @@ function Navigation() {
 export function Layout() {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => setMobileOpen(false), [pathname]);
   return (
     <div className={`app-shell ${pathname === "/chat" ? "chat-route" : ""}`}>
       <a className="skip-link" href="#main">跳到主要内容</a>
@@ -48,14 +51,15 @@ export function Layout() {
               <><NavLink className="text-link" to="/login">登录</NavLink><NavLink className="button compact" to="/register">注册</NavLink></>
             )}
           </div>
+          {user && <button className="mobile-menu-trigger" type="button" aria-expanded={mobileOpen} aria-controls="mobile-navigation" onClick={() => setMobileOpen((value) => !value)}>{mobileOpen ? "关闭" : "菜单"}</button>}
         </div>
-        {user && <div className="mobile-nav"><Navigation /></div>}
+        {user && <div id="mobile-navigation" className={`mobile-nav ${mobileOpen ? "open" : ""}`}><Navigation onNavigate={() => setMobileOpen(false)} /></div>}
       </header>
       <main id="main"><Outlet /></main>
       {user && <ReminderWatcher />}
       <footer className="site-footer">
         <p>广金大师兄 · 校园信息以来源、核验状态和更新时间为准</p>
-        <p>目前不提供可靠实时菜单；站内提醒需保持网站打开，HTTPS 部署后才能进一步启用 Web Push。</p>
+        <p>地点、菜单和办事信息以页面标注的来源、核验状态与更新时间为准。</p>
       </footer>
     </div>
   );
@@ -83,5 +87,5 @@ function ReminderWatcher() {
     setReminders((current) => current.filter((row) => row.id !== item.id));
     try { await api(`/reminders/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: "dismissed", confirmed: true }) }); } catch { /* toast remains dismissed locally */ }
   };
-  return <div className="reminder-toasts" aria-live="assertive">{reminders.map((item) => <aside className="reminder-toast" key={item.id}><span>提醒</span><strong>{item.title}</strong>{item.body && <p>{item.body}</p>}<button onClick={() => void dismiss(item)}>知道了</button></aside>)}</div>;
+  return <div className="reminder-toasts" aria-live="assertive">{reminders.map((item) => <aside className="reminder-toast" key={item.id}><span>提醒</span><strong>{item.title}</strong>{item.body && <p>{item.body}</p>}<div className="reminder-toast-actions"><button onClick={() => void dismiss(item)}>知道了</button>{item.location_id && <NavLink to={`/map?destination=${encodeURIComponent(item.location_id)}&use_current=1`}>从我这里去</NavLink>}</div></aside>)}</div>;
 }

@@ -14,6 +14,7 @@ from app.core.llm_client import LLMClient, LLMClientError, get_llm_client
 from app.models.entities import Campus, Conversation, Message
 from app.schemas.agent import AgentChatRequest, AgentChatResponse, AgentStatusResponse
 from app.services.agent_service import AgentService
+from app.services.ownership import get_owned_conversation
 
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -50,7 +51,14 @@ async def chat(payload: AgentChatRequest, user: CurrentUser, db: DbSession, llm:
     elif campus_id and not db.scalar(select(Campus.id).where(Campus.id == campus_id, Campus.is_active.is_(True))):
         raise HTTPException(status_code=422, detail="校区不存在")
     try:
-        return await AgentService(db, llm).chat(user, payload.message, payload.conversation_id, campus_id)
+        return await AgentService(db, llm).chat(
+            user,
+            payload.message,
+            payload.conversation_id,
+            campus_id,
+            location_context=payload.location_context,
+            resume_navigation=payload.resume_navigation,
+        )
     except LLMClientError as exc:
         db.rollback()
         raise HTTPException(
@@ -91,7 +99,15 @@ async def chat_stream(
 
         async def work() -> None:
             try:
-                await AgentService(db, llm).chat_stream(user, payload.message, payload.conversation_id, campus_id, emit)
+                await AgentService(db, llm).chat_stream(
+                    user,
+                    payload.message,
+                    payload.conversation_id,
+                    campus_id,
+                    emit,
+                    location_context=payload.location_context,
+                    resume_navigation=payload.resume_navigation,
+                )
             except LLMClientError as exc:
                 db.rollback()
                 await emit("error", {"message": exc.public_message, "error_id": exc.error_id, "status": exc.status_code})
@@ -135,9 +151,7 @@ def create_conversation(user: CurrentUser, db: DbSession) -> dict:
 
 @router.get("/conversations/{conversation_id}")
 def conversation_detail(conversation_id: str, user: CurrentUser, db: DbSession) -> dict:
-    row = db.scalar(select(Conversation).options(selectinload(Conversation.messages)).where(Conversation.id == conversation_id, Conversation.user_id == user.id))
-    if not row:
-        raise HTTPException(status_code=404, detail="对话不存在")
+    row = get_owned_conversation(db, conversation_id, user.id)
     return {
         "id": row.id,
         "title": row.title,
@@ -158,9 +172,7 @@ def conversation_detail(conversation_id: str, user: CurrentUser, db: DbSession) 
 
 @router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_conversation(conversation_id: str, user: CurrentUser, db: DbSession) -> Response:
-    row = db.scalar(select(Conversation).where(Conversation.id == conversation_id, Conversation.user_id == user.id))
-    if not row:
-        raise HTTPException(status_code=404, detail="对话不存在")
+    row = get_owned_conversation(db, conversation_id, user.id)
     db.delete(row)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

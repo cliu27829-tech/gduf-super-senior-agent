@@ -16,6 +16,8 @@ test("core student workflows remain usable on a phone viewport", async ({ page, 
     await expect(page.getByLabel("所属校区")).not.toHaveValue("");
     await page.getByRole("button", { name: "注册并登录" }).click();
     await expect(page.getByRole("heading", { name: /手机端同学，今天先做哪一件/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "菜单" })).toBeVisible();
+    await page.getByRole("button", { name: "菜单" }).click();
     await expect(page.locator(".mobile-nav")).toBeVisible();
 
     for (const viewport of [

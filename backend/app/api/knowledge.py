@@ -41,11 +41,12 @@ def _validate_campus(db: DbSession, campus_id: str | None) -> None:
 
 
 def _visible_source(db: DbSession, user: CurrentUser, source_id: str) -> KnowledgeDocument:
-    access = KnowledgeDocument.owner_user_id == user.id
+    access = or_(
+        KnowledgeDocument.visibility == "public",
+        KnowledgeDocument.owner_user_id == user.id,
+    )
     if user.role == "admin":
-        access = KnowledgeDocument.id == source_id
-    else:
-        access = or_(KnowledgeDocument.visibility == "public", access)
+        access = or_(access, KnowledgeDocument.review_status == "pending")
     item = db.scalar(select(KnowledgeDocument).where(
         KnowledgeDocument.id == source_id,
         KnowledgeDocument.is_active.is_(True),
@@ -58,9 +59,10 @@ def _visible_source(db: DbSession, user: CurrentUser, source_id: str) -> Knowled
 
 @router.get("/sources", response_model=list[KnowledgeSourceRead])
 def list_sources(user: CurrentUser, db: DbSession) -> list[KnowledgeDocument]:
-    query = select(KnowledgeDocument).where(KnowledgeDocument.is_active.is_(True))
-    if user.role != "admin":
-        query = query.where(or_(KnowledgeDocument.visibility == "public", KnowledgeDocument.owner_user_id == user.id))
+    access = or_(KnowledgeDocument.visibility == "public", KnowledgeDocument.owner_user_id == user.id)
+    if user.role == "admin":
+        access = or_(access, KnowledgeDocument.review_status == "pending")
+    query = select(KnowledgeDocument).where(KnowledgeDocument.is_active.is_(True), access)
     return list(db.scalars(query.order_by(KnowledgeDocument.created_at.desc()).limit(500)))
 
 
@@ -79,11 +81,35 @@ def delete_source(
     if not confirmed:
         raise HTTPException(status_code=422, detail="删除知识来源前必须明确确认")
     item = _visible_source(db, user, source_id)
-    if item.owner_user_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="只能删除自己导入的私有资料")
+    if item.owner_user_id != user.id:
+        raise HTTPException(status_code=404, detail="知识来源不存在")
     db.delete(item)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/sources/{source_id}/submit-review", response_model=KnowledgeSourceRead)
+def submit_source_for_review(
+    source_id: str,
+    user: CurrentUser,
+    db: DbSession,
+    confirmed: bool = Query(default=False),
+) -> KnowledgeDocument:
+    if not confirmed:
+        raise HTTPException(status_code=422, detail="提交共享审核前必须明确确认")
+    item = db.scalar(
+        select(KnowledgeDocument).where(
+            KnowledgeDocument.id == source_id,
+            KnowledgeDocument.owner_user_id == user.id,
+            KnowledgeDocument.is_active.is_(True),
+        )
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="知识来源不存在")
+    item.review_status = "pending"
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 @router.get("/search", response_model=list[KnowledgeSearchResult])
@@ -244,9 +270,15 @@ def review_source(
     admin: AdminUser,
     db: DbSession,
 ) -> KnowledgeDocument:
-    item = db.get(KnowledgeDocument, source_id)
+    item = db.scalar(
+        select(KnowledgeDocument).where(
+            KnowledgeDocument.id == source_id,
+            KnowledgeDocument.is_active.is_(True),
+            KnowledgeDocument.review_status == "pending",
+        )
+    )
     if not item:
-        raise HTTPException(status_code=404, detail="知识来源不存在")
+        raise HTTPException(status_code=404, detail="待审核知识来源不存在")
     if not payload.confirmed:
         raise HTTPException(status_code=422, detail="管理员审核正式数据前必须二次确认")
     if payload.status == "approved" and not payload.evidence.strip():

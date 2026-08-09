@@ -92,7 +92,7 @@ test("loads the configured AMap base map and geocoded campus marker", async ({ p
   const detail = page.getByRole("complementary", { name: "地点详情" });
   await expect(detail).toBeVisible();
   await expect(detail.getByText("精确点位", { exact: true })).toBeVisible();
-  await expect(detail.getByRole("link", { name: "打开高德步行导航" })).toBeVisible();
+  await expect(detail.getByRole("link", { name: "在高德打开" })).toBeVisible();
   await page.getByRole("button", { name: "关闭" }).click();
 
   await page.getByRole("combobox", { name: "起点" }).selectOption({ label: "北教学楼AD座" });

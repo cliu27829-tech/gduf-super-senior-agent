@@ -1,0 +1,23 @@
+:root {
+  --brand-primary: #a51c30;
+  --brand-primary-hover: #861526;
+  --brand-primary-soft: #f8e9eb;
+  --brand-accent: #c68a2d;
+  --brand-accent-soft: #f8eed8;
+  --surface: #fffdfa;
+  --surface-muted: #f6f1ea;
+  --surface-elevated: #ffffff;
+  --text-primary: #271c1e;
+  --text-secondary: #716467;
+  --border-subtle: #e5d9d8;
+  --status-success: #267255;
+  --status-warning: #8a6416;
+  --status-danger: #a53a34;
+  --focus-ring: rgba(165, 28, 48, .22);
+  --shadow-sm: 0 8px 24px rgba(67, 32, 37, .06);
+  --shadow-lg: 0 22px 60px rgba(67, 32, 37, .11);
+  --radius-sm: 9px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --space-page: clamp(16px, 4vw, 40px);
+}

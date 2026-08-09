@@ -2,18 +2,19 @@ import AMapLoader from "@amap/amap-jsapi-loader";
 import { useEffect, useRef, useState } from "react";
 import { API_BASE_URL } from "../api";
 import type { Campus, Location } from "../types";
+import type { BrowserLocation } from "../location";
 
 type AMapNamespace = {
   Map: new (container: HTMLElement, options: Record<string, unknown>) => AMapInstance;
   Marker: new (options: Record<string, unknown>) => AMapOverlay;
   Polyline: new (options: Record<string, unknown>) => AMapOverlay;
+  Circle: new (options: Record<string, unknown>) => AMapOverlay;
   Geocoder: new (options: Record<string, unknown>) => {
     getLocation: (address: string, callback: (status: string, result: GeocodeResult) => void) => void;
   };
   Walking: new (options?: Record<string, unknown>) => {
     search: (origin: [number, number], destination: [number, number], callback: (status: string, result: WalkingResult) => void) => void;
   };
-  Geolocation: new (options: Record<string, unknown>) => { getCurrentPosition: () => void; on: (name: string, callback: (event: { position?: { lng: number; lat: number } }) => void) => void };
   plugin: (names: string[], callback: () => void) => void;
 };
 type AMapOverlay = { on?: (name: string, callback: () => void) => void };
@@ -52,6 +53,7 @@ export function AmapCanvas({
   campus,
   locations,
   selected,
+  currentLocation,
   route,
   routeRequest,
   onRouteCalculated,
@@ -61,6 +63,7 @@ export function AmapCanvas({
   campus: Campus;
   locations: Location[];
   selected: Location | null;
+  currentLocation: BrowserLocation | null;
   route: MapRoute | null;
   routeRequest: MapRouteRequest | null;
   onRouteCalculated: (route: MapRoute) => void;
@@ -72,6 +75,7 @@ export function AmapCanvas({
   const amapRef = useRef<AMapNamespace | null>(null);
   const markerOverlaysRef = useRef<AMapOverlay[]>([]);
   const routeOverlayRef = useRef<AMapOverlay | null>(null);
+  const currentLocationOverlaysRef = useRef<AMapOverlay[]>([]);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const jsKey = String(import.meta.env.VITE_AMAP_JS_KEY || "").trim();
@@ -222,29 +226,43 @@ export function AmapCanvas({
   }, [route]);
 
   useEffect(() => {
+    const map = mapRef.current;
+    const AMap = amapRef.current;
+    if (!map || !AMap || !loaded) return;
+    if (currentLocationOverlaysRef.current.length) map.remove(currentLocationOverlaysRef.current);
+    currentLocationOverlaysRef.current = [];
+    if (!currentLocation) return;
+    const point: [number, number] = [currentLocation.longitude, currentLocation.latitude];
+    const accuracyCircle = new AMap.Circle({
+      center: point,
+      radius: currentLocation.accuracy,
+      strokeColor: "#2563eb",
+      strokeOpacity: 0.55,
+      strokeWeight: 1,
+      fillColor: "#3b82f6",
+      fillOpacity: 0.12,
+    });
+    const currentMarker = new AMap.Marker({
+      position: point,
+      title: "我的位置",
+      content: '<span class="amap-current-location" aria-label="我的位置"><i></i></span>',
+      offset: [-11, -11],
+      zIndex: 120,
+    });
+    currentLocationOverlaysRef.current = [accuracyCircle, currentMarker];
+    map.add(currentLocationOverlaysRef.current);
+    map.setCenter(point);
+  }, [currentLocation, loaded]);
+
+  useEffect(() => {
     if (selected?.longitude != null && selected.latitude != null) {
       mapRef.current?.setCenter([selected.longitude, selected.latitude]);
     }
   }, [selected]);
 
-  const locate = () => {
-    const AMap = amapRef.current;
-    const map = mapRef.current;
-    if (!AMap || !map) return;
-    AMap.plugin(["AMap.Geolocation"], () => {
-      const geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000 });
-      geolocation.on("complete", (event) => {
-        if (event.position) map.setCenter([event.position.lng, event.position.lat]);
-      });
-      geolocation.on("error", () => setError("浏览器定位失败，请检查定位权限"));
-      geolocation.getCurrentPosition();
-    });
-  };
-
   return (
     <div className="real-map-shell">
       <div ref={containerRef} className="real-map" aria-label={`${campus.name}高德真实道路地图`} />
-      <button className="ghost-button compact map-locate" type="button" onClick={locate}>定位我</button>
       {error && <div className="map-inline-error" role="alert">{error}</div>}
     </div>
   );

@@ -59,6 +59,8 @@ class ReminderRead(BaseModel):
     user_id: str
     task_id: str | None
     note_id: str | None
+    location_id: str | None = None
+    location_name: str = ""
     title: str
     body: str
     remind_at: datetime

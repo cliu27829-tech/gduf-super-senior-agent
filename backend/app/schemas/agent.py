@@ -4,12 +4,16 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.map import LocationContext
+
 
 class AgentChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=10000)
     conversation_id: str | None = None
     campus_id: str | None = None
     campus: str | None = Field(default=None, max_length=64)
+    location_context: LocationContext | None = None
+    resume_navigation: bool = False
 
     @field_validator("message")
     @classmethod

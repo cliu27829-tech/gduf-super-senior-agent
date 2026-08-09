@@ -75,6 +75,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def enforce_production_secrets(self) -> "Settings":
+        if self.cookie_samesite == "none" and not self.cookie_secure:
+            raise ValueError("COOKIE_SAMESITE=none requires COOKIE_SECURE=true")
         if self.environment == "production":
             weak = (
                 self.jwt_secret.startswith("development-")
