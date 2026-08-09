@@ -59,6 +59,12 @@ class LocationRead(BaseModel):
     verification_method: str
     verified_at: datetime | None
     verified_by: str
+    coordinate_source: str
+    coordinate_accuracy: str
+    coordinate_verified_at: datetime | None
+    coordinate_verified_by: str
+    coordinate_note: str
+    amap_poi_id: str
     confidence: float
     freshness_status: str
     data_status: str
@@ -90,6 +96,12 @@ class LocationCreate(BaseModel):
     verification_method: str = "admin_entry"
     verified_at: datetime | None = None
     verified_by: str = ""
+    coordinate_source: str = ""
+    coordinate_accuracy: str = Field(default="unknown", pattern=r"^(exact|approximate|area_only|unknown)$")
+    coordinate_verified_at: datetime | None = None
+    coordinate_verified_by: str = ""
+    coordinate_note: str = ""
+    amap_poi_id: str = ""
     confidence: float = Field(default=0.0, ge=0, le=1)
     freshness_status: str = "needs_verification"
     data_status: str = "admin_entry"
@@ -115,6 +127,12 @@ class LocationUpdate(BaseModel):
     verification_status: str | None = None
     verification_method: str | None = None
     verified_at: datetime | None = None
+    coordinate_source: str | None = None
+    coordinate_accuracy: str | None = Field(default=None, pattern=r"^(exact|approximate|area_only|unknown)$")
+    coordinate_verified_at: datetime | None = None
+    coordinate_verified_by: str | None = None
+    coordinate_note: str | None = None
+    amap_poi_id: str | None = None
     confidence: float | None = Field(default=None, ge=0, le=1)
     freshness_status: str | None = None
     data_status: str | None = None
@@ -160,6 +178,7 @@ class CanteenRead(BaseModel):
     verified_at: datetime | None
     confidence: float
     is_active: bool
+    location: LocationRead | None = None
     source: SourceRead | None = None
     stalls: list[StallRead] = Field(default_factory=list)
     today_menu_available: bool = False

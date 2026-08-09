@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { EmptyState, Loading } from "../components/ProtectedRoute";
@@ -54,9 +55,9 @@ export default function CanteensPage() {
       {loading ? <Loading /> : canteens.length ? <div className="canteen-grid">{canteens.map((canteen) => <article className="canteen-card" key={canteen.id}>
         <div className="canteen-card-head"><span className="canteen-number">食</span><div><h2>{canteen.name}</h2><div className="badge-row"><StatusBadge value={canteen.verification_status} /><span className={`status-badge status-${canteen.data_status}`}>{dataLabel(canteen.data_status)}</span></div></div></div>
         {canteen.data_status === "historical" && <p className="date-warning">这是历史公开资料，不代表目前楼层布局、营业时间或档口仍然相同。</p>}
-        <dl><dt>历史楼层</dt><dd>{canteen.floors.join("、") || "待核验"}</dd><dt>开放时间</dt><dd>{canteen.opening_hours || "无可靠当前数据"}</dd><dt>支付方式</dt><dd>{canteen.payment_methods.join("、") || "无可靠当前数据"}</dd><dt>资料日期</dt><dd>{formatDate(canteen.verified_at)}</dd></dl>
+        <dl><dt>位置</dt><dd>{canteen.location?.coordinate_verified_at && canteen.location.coordinate_accuracy === "exact" ? <Link to={`/map?location=${encodeURIComponent(canteen.location.id)}`}>{canteen.location.area || canteen.location.name} · 查看地图</Link> : "位置待核验"}</dd><dt>历史楼层</dt><dd>{canteen.floors.join("、") || "待核验"}</dd><dt>开放时间</dt><dd>{canteen.opening_hours || "无可靠当前数据"}</dd><dt>支付方式</dt><dd>{canteen.payment_methods.join("、") || "无可靠当前数据"}</dd><dt>资料日期</dt><dd>{formatDate(canteen.verified_at)}</dd></dl>
         <div className="stall-list"><h3>公开资料中的楼层/餐品</h3>{canteen.stalls.length ? canteen.stalls.map((stall) => <div key={stall.id}><strong>{stall.name}</strong><small>{stall.floor || "楼层未注明"} · {stall.food_type || "类型未注明"}</small><p>{stall.common_items.length ? `当时公开记录：${stall.common_items.join("、")}` : "未记录具体餐品"}</p><div className="badge-row"><StatusBadge value={stall.verification_status} /><span className={`status-badge status-${stall.data_status}`}>{dataLabel(stall.data_status)}</span></div></div>) : <p>暂无可公开的档口记录。</p>}</div>
-        <footer>{canteen.source?.url ? <a href={canteen.source.url} target="_blank" rel="noreferrer">来源：{canteen.source.publisher || canteen.source.title}</a> : <span>来源待补充</span>}<small>可信度 {Math.round(canteen.confidence * 100)}%</small></footer>
+        <footer>{canteen.source?.url ? <a href={canteen.source.url} target="_blank" rel="noreferrer">来源：{canteen.source.publisher || canteen.source.title}</a> : <span>来源待补充</span>}<small>{canteen.location?.coordinate_verified_at ? "地点已核验" : "地点待核验"}</small></footer>
       </article>)}</div> : <EmptyState title="该校区暂无可公开饭堂记录" detail="系统不会自动生成饭堂、档口或营业信息。" />}
     </section>
   );

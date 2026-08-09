@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { api, apiFileUrl } from "../api";
+import { AmapCalibrator } from "../components/AmapCalibrator";
 import { EmptyState, Loading } from "../components/ProtectedRoute";
 import { formatDate, StatusBadge } from "../components/StatusBadge";
 import type { Campus, Location } from "../types";
@@ -93,7 +94,7 @@ function KnowledgeReviewAdmin({ rows, reload, setNotice, setError }: { rows: Adm
       setError(reason instanceof Error ? reason.message : "审核失败");
     }
   };
-  return <div className="panel admin-form"><div className="panel-heading"><h2>好人师兄资料审核</h2><span>{allPrivateRows.length} 条私有待审线索{allPrivateRows.length > 50 ? "（首屏显示 50 条）" : ""}</span></div><p>机器提取内容默认私有。通过共享前必须填写核验方式、字段、证据、备注并二次确认；审核不会把历史资料自动标成最新。</p>{privateRows.length ? <div className="managed-records">{privateRows.map((row) => <div className="managed-row-actions" key={String(row.id)}><div><strong>{String(row.title)}</strong><small>{String(row.source_type)} · {String(row.review_status)}</small></div><button onClick={() => void review(row, "approved")}>核验并共享</button><button className="danger-link" onClick={() => void review(row, "rejected")}>拒绝</button></div>)}</div> : <p>没有私有待审资料。</p>}</div>;
+  return <div className="panel admin-form"><div className="panel-heading"><h2>内部知识资料审核</h2><span>{allPrivateRows.length} 条私有待审线索{allPrivateRows.length > 50 ? "（首屏显示 50 条）" : ""}</span></div><p>机器提取内容默认私有。通过共享前必须填写核验方式、字段、证据、备注并二次确认；审核不会把历史资料自动标成最新。</p>{privateRows.length ? <div className="managed-records">{privateRows.map((row) => <div className="managed-row-actions" key={String(row.id)}><div><strong>{String(row.title)}</strong><small>{String(row.source_type)} · {String(row.review_status)}</small></div><button onClick={() => void review(row, "approved")}>核验并共享</button><button className="danger-link" onClick={() => void review(row, "rejected")}>拒绝</button></div>)}</div> : <p>没有私有待审资料。</p>}</div>;
 }
 
 function Dashboard({ data }: { data: AdminRecord }) {
@@ -103,11 +104,52 @@ function Dashboard({ data }: { data: AdminRecord }) {
 
 function LocationsAdmin({ rows, campuses, reload, setNotice, setError }: { rows: Location[]; campuses: Campus[]; reload: () => Promise<unknown>; setNotice: (value: string) => void; setError: (value: string) => void }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ campus_id: campuses[0]?.id || "", name: "", category: "other", area: "", latitude: "", longitude: "", verification_status: "needs_verification", confidence: "0", evidence: "", verification_note: "" });
-  useEffect(() => { if (!form.campus_id && campuses[0]) setForm((value) => ({ ...value, campus_id: campuses[0].id })); }, [campuses]);
-  const save = async (event: FormEvent) => { event.preventDefault(); try { await api("/admin/locations", { method: "POST", body: JSON.stringify({ ...form, latitude: form.latitude ? Number(form.latitude) : null, longitude: form.longitude ? Number(form.longitude) : null, confidence: Number(form.confidence), aliases: [], services: [], payment_methods: [], source_ids: [], data_status: form.verification_status === "verified" ? "admin_verified" : "needs_verification", verification_method: "admin_entry" }) }); setShow(false); setNotice("地点已创建并写入审计日志"); await reload(); } catch (reason) { setError(reason instanceof Error ? reason.message : "保存失败"); } };
+  const [selectedId, setSelectedId] = useState(rows[0]?.id || "");
+  const [form, setForm] = useState({ campus_id: campuses[0]?.id || "", name: "", category: "other", area: "", latitude: "", longitude: "", coordinate_accuracy: "unknown", coordinate_source: "", verification_status: "needs_verification", confidence: "0", evidence: "", verification_note: "" });
+  useEffect(() => { if (!form.campus_id && campuses[0]) setForm((value) => ({ ...value, campus_id: campuses[0].id })); }, [campuses, form.campus_id]);
+  useEffect(() => { if (!rows.some((item) => item.id === selectedId)) setSelectedId(rows[0]?.id || ""); }, [rows, selectedId]);
+  const selected = rows.find((item) => item.id === selectedId) || null;
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      await api("/admin/locations", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          latitude: form.latitude ? Number(form.latitude) : null,
+          longitude: form.longitude ? Number(form.longitude) : null,
+          confidence: Number(form.confidence),
+          coordinate_accuracy: form.latitude && form.longitude ? form.coordinate_accuracy : "unknown",
+          aliases: [], services: [], payment_methods: [], source_ids: [],
+          data_status: form.verification_status === "verified" ? "admin_verified" : "needs_verification",
+          verification_method: "admin_entry",
+        }),
+      });
+      setShow(false);
+      setNotice("地点已创建并写入审计日志");
+      await reload();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "保存失败"); }
+  };
   const deactivate = async (id: string) => { await api(`/admin/locations/${id}`, { method: "DELETE" }); await reload(); };
-  return <><div className="admin-actions"><button className="button" onClick={() => setShow(!show)}>＋ 添加地点</button><span>共 {rows.length} 条，含停用记录</span></div>{show && <form className="panel admin-form" onSubmit={save}><div className="form-grid"><label>校区<select value={form.campus_id} onChange={(e) => setForm({ ...form, campus_id: e.target.value })}>{campuses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>地点名称<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>分类<input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></label><label>区域<input value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} /></label><label>纬度（真实坐标）<input type="number" min="-90" max="90" step="0.000001" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} /></label><label>经度（真实坐标）<input type="number" min="-180" max="180" step="0.000001" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} /></label><label>核验状态<select value={form.verification_status} onChange={(e) => setForm({ ...form, verification_status: e.target.value })}><option value="needs_verification">待核验</option><option value="verified">已核验</option></select></label><label>可信度<input type="number" min="0" max="1" step="0.05" value={form.confidence} onChange={(e) => setForm({ ...form, confidence: e.target.value })} /></label><label className="span-two">核验证据<input value={form.evidence} onChange={(e) => setForm({ ...form, evidence: e.target.value })} placeholder="标记已核验时必填" /></label><label className="span-two">核验备注<textarea value={form.verification_note} onChange={(e) => setForm({ ...form, verification_note: e.target.value })} /></label></div><button className="button">保存地点</button></form>}<div className="admin-table"><div className="admin-table-head"><span>地点</span><span>分类</span><span>核验</span><span>更新时间</span><span>操作</span></div>{rows.map((row) => <div className="admin-table-row" key={row.id}><div><strong>{row.name}</strong><small>{row.area || row.address}</small></div><span>{row.category}</span><StatusBadge value={row.is_active ? row.verification_status : "inactive"} /><span>{formatDate(row.updated_at)}</span><button className="danger-link" disabled={!row.is_active} onClick={() => void deactivate(row.id)}>停用</button></div>)}</div></>;
+  return <>
+    <div className="admin-actions"><button className="button" onClick={() => setShow(!show)}>＋ 添加地点</button><label>校准地点<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{rows.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.coordinate_accuracy}</option>)}</select></label><span>共 {rows.length} 条，含停用记录</span></div>
+    {show && <form className="panel admin-form" onSubmit={save}><div className="form-grid">
+      <label>校区<select value={form.campus_id} onChange={(event) => setForm({ ...form, campus_id: event.target.value })}>{campuses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label>地点名称<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+      <label>分类<input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></label>
+      <label>区域<input value={form.area} onChange={(event) => setForm({ ...form, area: event.target.value })} /></label>
+      <label>纬度<input type="number" min="-90" max="90" step="0.000001" value={form.latitude} onChange={(event) => setForm({ ...form, latitude: event.target.value })} /></label>
+      <label>经度<input type="number" min="-180" max="180" step="0.000001" value={form.longitude} onChange={(event) => setForm({ ...form, longitude: event.target.value })} /></label>
+      <label>坐标精度<select value={form.coordinate_accuracy} onChange={(event) => setForm({ ...form, coordinate_accuracy: event.target.value })}><option value="unknown">未知</option><option value="exact">精确</option><option value="approximate">近似</option><option value="area_only">仅区域</option></select></label>
+      <label>坐标来源<input value={form.coordinate_source} onChange={(event) => setForm({ ...form, coordinate_source: event.target.value })} /></label>
+      <label>核验状态<select value={form.verification_status} onChange={(event) => setForm({ ...form, verification_status: event.target.value })}><option value="needs_verification">待核验</option><option value="verified">已核验</option></select></label>
+      <label>可信度<input type="number" min="0" max="1" step="0.05" value={form.confidence} onChange={(event) => setForm({ ...form, confidence: event.target.value })} /></label>
+      <label className="span-two">核验证据<input value={form.evidence} onChange={(event) => setForm({ ...form, evidence: event.target.value })} placeholder="精确坐标或已核验状态必须填写" /></label>
+      <label className="span-two">核验备注<textarea value={form.verification_note} onChange={(event) => setForm({ ...form, verification_note: event.target.value })} /></label>
+    </div><button className="button">保存地点</button></form>}
+    <AmapCalibrator location={selected} onSaved={reload} />
+    <div className="admin-table"><div className="admin-table-head"><span>地点</span><span>分类</span><span>坐标质量</span><span>更新时间</span><span>操作</span></div>{rows.map((row) => <div className="admin-table-row" key={row.id}><div><strong>{row.name}</strong><small>{row.area || row.address}</small></div><span>{row.category}</span><button onClick={() => setSelectedId(row.id)}>{row.coordinate_accuracy} · {row.amap_poi_id || "无 POI"}</button><span>{formatDate(row.updated_at)}</span><button className="danger-link" disabled={!row.is_active} onClick={() => void deactivate(row.id)}>停用</button></div>)}</div>
+  </>;
 }
 
 function FeedbackAdmin({ rows, reload, setNotice }: { rows: AdminRecord[]; reload: () => Promise<unknown>; setNotice: (value: string) => void }) {

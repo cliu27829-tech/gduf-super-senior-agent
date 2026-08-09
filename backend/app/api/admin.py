@@ -50,6 +50,24 @@ from app.schemas.campus import (
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+def validate_coordinate_evidence(
+    *,
+    latitude: float | None,
+    longitude: float | None,
+    accuracy: str,
+    source: str,
+    evidence: str,
+) -> None:
+    """Prevent an untraceable click from being promoted to an exact campus point."""
+    if (latitude is None) != (longitude is None):
+        raise HTTPException(status_code=422, detail="纬度和经度必须同时填写")
+    if accuracy == "exact":
+        if latitude is None or longitude is None:
+            raise HTTPException(status_code=422, detail="精确坐标必须同时填写经纬度")
+        if not source.strip() or not evidence.strip():
+            raise HTTPException(status_code=422, detail="标记为精确坐标时必须填写坐标来源和核验依据")
+
+
 def audit(db: DbSession, admin_id: str, action: str, entity_type: str = "", entity_id: str = "", summary: str = "") -> None:
     db.add(AdminAuditLog(admin_id=admin_id, action=action, entity_type=entity_type, entity_id=entity_id, summary=summary[:2000]))
 
@@ -147,6 +165,13 @@ def locations(admin: AdminUser, db: DbSession) -> list[Location]:
 
 @router.post("/locations", response_model=LocationRead, status_code=status.HTTP_201_CREATED)
 def create_location(payload: LocationCreate, admin: AdminUser, db: DbSession) -> Location:
+    validate_coordinate_evidence(
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        accuracy=payload.coordinate_accuracy,
+        source=payload.coordinate_source,
+        evidence=payload.evidence,
+    )
     data = payload.model_dump(exclude={"source_ids", "evidence", "verification_note", "id"})
     location = Location(id=payload.id or new_id(), **data)
     if payload.source_ids:
@@ -167,11 +192,23 @@ def update_location(location_id: str, payload: LocationUpdate, admin: AdminUser,
     changes = payload.model_dump(exclude_unset=True, exclude={"source_ids", "evidence", "verification_note"})
     for key, value in changes.items():
         setattr(location, key, value)
+    coordinate_fields = {"latitude", "longitude", "coordinate_accuracy", "coordinate_source", "amap_poi_id"}
+    evidence = payload.evidence if coordinate_fields.intersection(changes) else (payload.evidence or "existing verification")
+    validate_coordinate_evidence(
+        latitude=location.latitude,
+        longitude=location.longitude,
+        accuracy=location.coordinate_accuracy,
+        source=location.coordinate_source,
+        evidence=evidence,
+    )
     if payload.source_ids is not None:
         location.sources = list(db.scalars(select(Source).where(Source.id.in_(payload.source_ids))))
     if location.verification_status == "verified":
         location.verified_at = location.verified_at or utcnow()
         location.verified_by = admin.id
+    if location.coordinate_accuracy in {"exact", "approximate"} and location.latitude is not None:
+        location.coordinate_verified_at = location.coordinate_verified_at or utcnow()
+        location.coordinate_verified_by = admin.id
     verify_record(db, admin.id, "location", location.id, location.verification_status, payload.evidence, payload.verification_note)
     audit(db, admin.id, "location.update", "location", location.id, f"fields={sorted(changes)}")
     db.commit()

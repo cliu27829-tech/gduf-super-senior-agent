@@ -2,31 +2,93 @@
   {
     "id": "gz-campus-card-replacement",
     "title": "校园卡丢失挂失与补卡",
-    "category": "校园卡补办",
+    "category": "校园卡",
     "steps": [
-      {"order": 1, "text": "先通过学校官方校园卡渠道挂失；无法在线处理时联系校园卡部确认。"},
-      {"order": 2, "text": "携本人有效身份证件前往校园卡部办理补卡。"},
-      {"order": 3, "text": "服务窗口具体位置、办理时间和费用以当天官方通知或校园卡部答复为准。"}
+      {"order": 1, "text": "发现丢卡后先通过学校校园卡渠道挂失，避免卡内余额被使用。"},
+      {"order": 2, "text": "携带本人有效身份证件到校园卡部办理补卡。"},
+      {"order": 3, "text": "领取后现场确认身份信息、余额和热水功能是否正常。"}
     ],
     "materials": ["本人有效身份证件"],
-    "contact": "校园卡部：020-37216660",
-    "audience": "广州校本部校园卡持卡学生（其他校区请先向所在校区确认）",
-    "location": "具体服务窗口位置未见当前公开资料，办理前请电话确认",
-    "opening_hours": "当前公开办理时间待核验",
-    "online_url": "https://etnc.gduf.edu.cn/fwzn/xyk/xykdkgsbklc.htm",
-    "notes": "公开页面可能已更新，现场位置、费用和办理时间以最新官方答复为准。",
+    "contact": "教育技术与网络管理中心：020-37215005",
+    "audience": "校园卡持卡学生",
+    "location": "校园卡部；当前具体窗口请先电话确认",
+    "opening_hours": "办理时间以校园卡部当前通知为准",
+    "online_url": "https://etnc.gduf.edu.cn/fwzn/xyk/xykbllc.htm",
+    "notes": "学校公开页面列明补卡工本费为15元；收费与窗口安排仍以办理当日公示为准。",
+    "verification_status": "verified",
+    "verified_at": "2026-08-09T00:00:00+08:00",
+    "confidence": 0.92,
+    "data_status": "official",
+    "is_active": true,
+    "source": {"title": "校园卡办理流程", "url": "https://etnc.gduf.edu.cn/fwzn/xyk/xykbllc.htm", "publisher": "广东金融学院教育技术与网络管理中心", "source_type": "official_page", "is_official": true, "confidence": 0.92}
+  },
+  {
+    "id": "gz-dormitory-repair",
+    "title": "学生宿舍设施报修",
+    "category": "宿舍服务",
+    "steps": [
+      {"order": 1, "text": "记录宿舍楼栋、房间、损坏设施和故障现象；涉及漏电、漏水等危险时先远离现场。"},
+      {"order": 2, "text": "到所在宿舍楼值班室登记报修；如需咨询宿舍管理，可拨打学校后勤公开服务热线。"},
+      {"order": 3, "text": "保留登记时间并配合维修人员入场；人为损坏可能需要按规定承担费用。"}
+    ],
+    "materials": ["宿舍楼栋和房间号", "故障描述", "现场照片（建议）"],
+    "contact": "宿舍管理服务热线：020-37216112",
+    "audience": "校内住宿学生",
+    "location": "所在宿舍楼值班室",
+    "opening_hours": "值班安排以所在楼栋现场公示为准",
+    "online_url": "https://hq.gduf.edu.cn/index/fwrx.htm",
+    "notes": "官方住宿规则明确设施损坏应及时到值班室登记报修；未发现统一线上报修入口。",
+    "verification_status": "verified",
+    "verified_at": "2026-08-09T00:00:00+08:00",
+    "confidence": 0.88,
+    "data_status": "official",
+    "is_active": true,
+    "source": {"title": "后勤服务中心服务热线", "url": "https://hq.gduf.edu.cn/index/fwrx.htm", "publisher": "广东金融学院后勤服务中心", "source_type": "official_page", "is_official": true, "confidence": 0.9}
+  },
+  {
+    "id": "gz-dormitory-network-repair",
+    "title": "学生宿舍网络故障报修",
+    "category": "校园网络",
+    "steps": [
+      {"order": 1, "text": "先确认账号状态、网线或无线连接，并记录故障时间和现象。"},
+      {"order": 2, "text": "移动宽带用户可拨打1008616；校内网络咨询可拨打020-37215005。"},
+      {"order": 3, "text": "需要现场处理时，前往实验教学大楼9楼902房报修。"}
+    ],
+    "materials": ["学号", "宿舍楼栋和房间号", "故障描述"],
+    "contact": "移动宽带：1008616；校内服务热线：020-37215005",
+    "audience": "学生宿舍网络用户",
+    "location": "实验教学大楼9楼902房",
+    "opening_hours": "现场服务时间请先电话确认",
+    "online_url": "https://etnc.gduf.edu.cn/info/1025/1263.htm",
+    "notes": "报修渠道来自学校公开的学生宿舍网络管理实施细则。",
+    "verification_status": "verified",
+    "verified_at": "2026-08-09T00:00:00+08:00",
+    "confidence": 0.94,
+    "data_status": "official",
+    "is_active": true,
+    "source": {"title": "学生宿舍网络管理实施细则", "url": "https://etnc.gduf.edu.cn/info/1025/1263.htm", "publisher": "广东金融学院教育技术与网络管理中心", "source_type": "official_page", "is_official": true, "confidence": 0.94}
+  },
+  {
+    "id": "gz-library-borrow-return",
+    "title": "图书馆借书与还书（现场确认版）",
+    "category": "图书馆",
+    "steps": [
+      {"order": 1, "text": "携带本人校园卡到图书馆，先检索馆藏并确认书籍是否可外借。"},
+      {"order": 2, "text": "按馆内当日指引在自助设备或服务台办理借阅；不要使用他人校园卡。"},
+      {"order": 3, "text": "在系统显示的到期日前归还；续借、超期或设备异常请到服务台处理。"}
+    ],
+    "materials": ["本人校园卡"],
+    "contact": "当前公开来源未列出有效服务电话，请在馆内服务台咨询",
+    "audience": "已开通图书馆权限的在校学生",
+    "location": "广州校区图书馆；具体服务台和设备位置以馆内标识为准",
+    "opening_hours": "开放安排随学期和节假日变化，请以图书馆当日公告为准",
+    "online_url": "https://www.gduf.edu.cn/info/1012/7302.htm",
+    "notes": "学校公开页确认图书馆机构存在，但没有提供可核验的当前借阅细则；本流程只保留通用现场步骤，不声称楼层、额度或期限。",
     "verification_status": "needs_verification",
-    "verified_at": "2026-08-04T00:00:00+08:00",
-    "confidence": 0.8,
+    "verified_at": "2026-08-09T00:00:00+08:00",
+    "confidence": 0.58,
     "data_status": "needs_verification",
     "is_active": true,
-    "source": {
-      "title": "校园卡丢卡挂失补卡流程",
-      "url": "https://etnc.gduf.edu.cn/fwzn/xyk/xykdkgsbklc.htm",
-      "publisher": "广东金融学院教育技术与网络管理中心",
-      "source_type": "official",
-      "is_official": true,
-      "confidence": 0.8
-    }
+    "source": {"title": "广东金融学院图书馆介绍", "url": "https://www.gduf.edu.cn/info/1012/7302.htm", "publisher": "广东金融学院", "source_type": "official_page_partial", "is_official": true, "confidence": 0.58}
   }
 ]

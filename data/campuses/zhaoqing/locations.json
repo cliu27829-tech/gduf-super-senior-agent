@@ -6,49 +6,37 @@
     "campus": "肇庆校区",
     "category": "other",
     "sub_category": "campus_anchor",
-    "description": "官方校区简介公开的校区地址；校内点位仍需人工核验。",
+    "description": "高德 POI 对应广东金融学院肇庆校区；校内建筑仍需逐点核验。",
     "address": "广东省肇庆市星湖石牌",
-    "map_x": 0.50,
-    "map_y": 0.50,
+    "latitude": 23.084712,
+    "longitude": 112.479497,
+    "coordinate_source": "AMap POI",
+    "coordinate_accuracy": "exact",
+    "coordinate_verified_at": "2026-08-09T00:00:00+08:00",
+    "coordinate_verified_by": "product-audit",
+    "coordinate_note": "高德 POI：广东金融学院(肇庆校区)",
+    "amap_poi_id": "B02F602DUG",
     "source_references": [
-      {
-        "title": "校区简介",
-        "url": "https://zqxq.gduf.edu.cn/index/xqjj.htm",
-        "publisher": "广东金融学院肇庆校区",
-        "published_at": null,
-        "source_level": 1,
-        "is_official": true,
-        "source_status": "current_source"
-      }
+      {"title": "高德地图：广东金融学院(肇庆校区)", "url": "https://www.amap.com/place/B02F602DUG", "publisher": "高德地图", "source_type": "amap_poi", "verified_at": "2026-08-09T00:00:00+08:00", "confidence": 0.98, "is_official": false},
+      {"title": "肇庆校区简介", "url": "https://zqxq.gduf.edu.cn/index/xqjj.htm", "publisher": "广东金融学院肇庆校区", "source_type": "official_page", "is_official": true}
     ],
-    "verification_method": "official_page",
-    "verified_at": null,
-    "freshness_status": "needs_verification",
-    "confidence": 0.7,
+    "verification_method": "amap_poi_audit",
+    "verified_at": "2026-08-09T00:00:00+08:00",
+    "freshness_status": "current",
+    "confidence": 0.98,
     "is_active": true,
-    "data_status": "needs_verification"
+    "data_status": "amap_verified"
   },
   {
     "id": "zq-canteen",
     "name": "肇庆校区饭堂（名称待核验）",
-    "aliases": ["肇庆饭堂", "一饭（学生俗称待核验）"],
+    "aliases": ["肇庆饭堂"],
     "campus": "肇庆校区",
     "category": "canteen",
     "area": "校内具体位置待核验",
-    "map_x": 0.58,
-    "map_y": 0.42,
-    "description": "官方校区简介仅确认校内建有饭堂，名称、楼层和营业信息未在该页面说明。",
-    "source_references": [
-      {
-        "title": "校区简介",
-        "url": "https://zqxq.gduf.edu.cn/index/xqjj.htm",
-        "publisher": "广东金融学院肇庆校区",
-        "published_at": null,
-        "source_level": 1,
-        "is_official": true,
-        "source_status": "current_source"
-      }
-    ],
+    "description": "校区简介确认校内建有饭堂，但没有公开具体点位、名称和营业信息。",
+    "coordinate_accuracy": "unknown",
+    "source_references": [{"title": "肇庆校区简介", "url": "https://zqxq.gduf.edu.cn/index/xqjj.htm", "publisher": "广东金融学院肇庆校区", "source_type": "official_page", "is_official": true}],
     "verification_method": "official_page_partial",
     "verified_at": null,
     "freshness_status": "needs_verification",
@@ -63,20 +51,9 @@
     "campus": "肇庆校区",
     "category": "library",
     "area": "校内具体位置待核验",
-    "map_x": 0.44,
-    "map_y": 0.55,
-    "description": "官方校区简介确认校内有图书馆；开放时间与入口待核验。",
-    "source_references": [
-      {
-        "title": "校区简介",
-        "url": "https://zqxq.gduf.edu.cn/index/xqjj.htm",
-        "publisher": "广东金融学院肇庆校区",
-        "published_at": null,
-        "source_level": 1,
-        "is_official": true,
-        "source_status": "current_source"
-      }
-    ],
+    "description": "校区简介确认校内有图书馆，精确入口和开放时间仍待核验。",
+    "coordinate_accuracy": "unknown",
+    "source_references": [{"title": "肇庆校区简介", "url": "https://zqxq.gduf.edu.cn/index/xqjj.htm", "publisher": "广东金融学院肇庆校区", "source_type": "official_page", "is_official": true}],
     "verification_method": "official_page_partial",
     "verified_at": null,
     "freshness_status": "needs_verification",

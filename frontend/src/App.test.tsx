@@ -178,26 +178,29 @@ describe("campus workflows", () => {
     expect(screen.getByText("校方地点说明")).toBeInTheDocument();
   });
 
-  it("parses a notification into editable drafts before saving", async () => {
-    const savedTask = { id: "saved-task", user_id: user.id, title: "提交课程报告", description: "", deadline: "2099-09-03T17:00:00+08:00", location: "教学平台", course: "", task_type: "general", materials: ["报告"], submission_target: "任课老师", submission_method: "在线提交", file_naming: "学号-姓名", source_text: "通知", source_url: "", status: "pending", needs_confirmation: false, completed_at: null, created_at: "2026-08-03T00:00:00Z", updated_at: "2026-08-03T00:00:00Z" };
+  it("parses a notification into editable actions before saving", async () => {
+    const savedTask = { id: "saved-task", user_id: user.id, title: "提交课程报告", description: "", deadline: "2099-09-03T17:00:00+08:00", location: "教学平台", course: "", task_type: "general", materials: ["报告"], submission_target: "任课老师", submission_method: "在线提交", file_naming: "学号-姓名", conditions: [], evidence_requirements: [], is_expired: false, source_title: "课程通知", source_text: "通知", source_url: "", status: "pending", needs_confirmation: false, completed_at: null, created_at: "2026-08-03T00:00:00Z", updated_at: "2026-08-03T00:00:00Z" };
     vi.stubGlobal("fetch", routeFetch({
       "/api/auth/me": user,
       "/api/notifications/parse": {
-        drafts: [{ title: "提交课程报告", deadline: "2099-09-03T17:00:00+08:00", location: "教学平台", materials: ["报告"], submission_target: "任课老师", submission_method: "在线提交", file_naming: "学号-姓名", notes: "", source_text: "通知", source_url: "", needs_confirmation: false, confidence: 0.9, date_explanation: "已识别明确日期" }],
+        notice: { title: "课程通知", notice_date_text: "", notice_date: null, publisher: "", campuses: [], audience: [], category: "课程", summary: "" },
+        rules: ["按要求完成报告"],
+        action_items: [{ title: "提交课程报告", action: "提交课程报告", audience: [], conditions: [], deadline_text: "9月3日17:00前", deadline: "2099-09-03T17:00:00+08:00", location: "教学平台", materials: ["报告"], evidence_requirements: [], submission_target: "任课老师", submission_method: "在线提交", file_naming: "学号-姓名", notes: [], source_title: "课程通知", source_text: "通知", source_url: "", needs_confirmation: false, is_expired: false, confidence: 0.9, date_explanation: "已识别明确日期" }],
+        deadlines: [{ text: "9月3日17:00前", deadline: "2099-09-03T17:00:00+08:00", action_title: "提交课程报告", is_expired: false, needs_confirmation: false }],
         extraction_mode: "rules",
-        warning: "当前使用规则解析，请核对日期。",
+        warnings: ["当前使用规则解析，请核对日期。"],
       },
       "/api/notifications/confirm": [savedTask],
     }));
     renderAt("/notifications", <App />);
-    const input = await screen.findByLabelText("通知文本");
+    const input = await screen.findByLabelText("通知原文");
     await userEvent.type(input, "9月3日前提交课程报告");
     await userEvent.click(screen.getByRole("button", { name: "解析通知" }));
-    expect(await screen.findByDisplayValue("提交课程报告")).toBeInTheDocument();
+    expect(await screen.findByLabelText("任务标题")).toHaveValue("提交课程报告");
     expect(screen.getByText("当前使用规则解析，请核对日期。")).toBeInTheDocument();
     const save = screen.getByRole("button", { name: /确认并保存 1 条任务/ });
     expect(save).toBeDisabled();
-    await userEvent.click(screen.getByRole("checkbox", { name: /我已逐项核对/ }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /我已核对任务/ }));
     expect(save).toBeEnabled();
     await userEvent.click(save);
     expect(await screen.findByRole("heading", { name: "任务已保存" })).toBeInTheDocument();

@@ -82,6 +82,9 @@ export function AmapCanvas({
     window._AMapSecurityConfig = {
       serviceHost: `${API_BASE_URL || window.location.origin}/api/map/_AMapService`,
     };
+    const loadTimeout = window.setTimeout(() => {
+      if (!disposed && !mapRef.current) setError("高德地图加载超时，请检查网络后刷新页面重试");
+    }, 20_000);
     AMapLoader.load({ key: jsKey, version: "2.0", plugins: [] })
       .then((loadedNamespace: unknown) => {
         if (disposed || !containerRef.current) return;
@@ -91,9 +94,11 @@ export function AmapCanvas({
         mapRef.current = map;
         setLoaded(true);
       })
-      .catch(() => { if (!disposed) setError("高德地图加载失败，请检查 JS Key、域名白名单和后端安全代理配置"); });
+      .catch(() => { if (!disposed) setError("高德地图加载失败，请检查 JS Key、域名白名单和后端安全代理配置"); })
+      .finally(() => window.clearTimeout(loadTimeout));
     return () => {
       disposed = true;
+      window.clearTimeout(loadTimeout);
       setLoaded(false);
       mapRef.current?.destroy();
       mapRef.current = null;
@@ -107,7 +112,7 @@ export function AmapCanvas({
     if (!map || !AMap || !loaded) return;
     if (markerOverlaysRef.current.length) map.remove(markerOverlaysRef.current);
     const markers = locations
-      .filter((item) => item.longitude != null && item.latitude != null && item.verification_status !== "needs_verification")
+      .filter((item) => item.longitude != null && item.latitude != null && ["exact", "approximate"].includes(item.coordinate_accuracy) && Boolean(item.coordinate_verified_at))
       .map((item) => {
         const marker = new AMap.Marker({
           position: [item.longitude!, item.latitude!],
@@ -117,7 +122,7 @@ export function AmapCanvas({
         marker.on?.("click", () => onSelect(item));
         return marker;
       });
-    const campusAnchor = locations.find((item) => item.name === campus.name && item.address);
+    const campusAnchor = locations.find((item) => item.name === campus.name && item.address && (item.longitude == null || item.latitude == null));
     const finish = (overlays: AMapOverlay[]) => {
       markerOverlaysRef.current = overlays;
       if (overlays.length) {

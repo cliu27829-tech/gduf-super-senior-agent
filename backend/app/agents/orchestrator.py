@@ -124,7 +124,14 @@ class AgentOrchestrator:
                 tool_name=tool.tool_name,
                 success=tool.success,
                 summary=tool.summary,
-                verification={**tool.verification, "pipeline": ["observe", "classify", "plan", "execute", "verify", "confirm", "remember", "respond"]},
+                verification={
+                    **tool.verification,
+                    "intent": decision.intent,
+                    "plan": plan.tool_names,
+                    "tools_called": [item.tool_name for item in tool_responses],
+                    "tool_success": {item.tool_name: item.success for item in tool_responses},
+                    "pipeline": ["observe", "classify", "plan", "execute", "verify", "confirm", "remember", "respond"],
+                },
                 error_code=tool.error or "",
             ))
         self.db.commit()
@@ -133,6 +140,9 @@ class AgentOrchestrator:
             conversation_id=conversation.id,
             message_id=assistant.id,
             intent=decision.intent,
+            plan=plan.tool_names,
+            tools_called=[tool.tool_name for tool in tool_responses],
+            tool_success={tool.tool_name: tool.success for tool in tool_responses},
             answer=answer,
             tool_results=display_results,
             sources=sources,

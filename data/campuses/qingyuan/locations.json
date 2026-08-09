@@ -6,27 +6,50 @@
     "campus": "清远校区",
     "category": "other",
     "sub_category": "campus_anchor",
-    "description": "清远校区官网公开地址；校内点位为示意坐标。",
+    "description": "高德 POI 对应广东金融学院清远校区。",
     "address": "广东省清远市清城区东城街道环城东路北1号",
-    "map_x": 0.50,
-    "map_y": 0.50,
+    "latitude": 23.717058,
+    "longitude": 113.086781,
+    "coordinate_source": "AMap POI",
+    "coordinate_accuracy": "exact",
+    "coordinate_verified_at": "2026-08-09T00:00:00+08:00",
+    "coordinate_verified_by": "product-audit",
+    "coordinate_note": "高德 POI：广东金融学院(清远校区)",
+    "amap_poi_id": "B0FFKQHBOL",
     "source_references": [
-      {
-        "title": "广东金融学院清远校区官网",
-        "url": "https://qyxq.gduf.edu.cn/",
-        "publisher": "广东金融学院清远校区",
-        "published_at": null,
-        "source_level": 1,
-        "is_official": true,
-        "source_status": "current_source"
-      }
+      {"title": "高德地图：广东金融学院(清远校区)", "url": "https://www.amap.com/place/B0FFKQHBOL", "publisher": "高德地图", "source_type": "amap_poi", "verified_at": "2026-08-09T00:00:00+08:00", "confidence": 0.98, "is_official": false},
+      {"title": "广东金融学院清远校区官网", "url": "https://qyxq.gduf.edu.cn/", "publisher": "广东金融学院清远校区", "source_type": "official_page", "is_official": true}
     ],
-    "verification_method": "official_page",
-    "verified_at": null,
-    "freshness_status": "needs_verification",
-    "confidence": 0.75,
+    "verification_method": "amap_poi_audit",
+    "verified_at": "2026-08-09T00:00:00+08:00",
+    "freshness_status": "current",
+    "confidence": 0.98,
     "is_active": true,
-    "data_status": "needs_verification"
+    "data_status": "amap_verified"
+  },
+  {
+    "id": "qy-library",
+    "name": "清远校区图书馆",
+    "aliases": ["清远图书馆", "图书馆"],
+    "campus": "清远校区",
+    "category": "library",
+    "area": "清远校区内",
+    "description": "高德同名 POI 精确点位；开放时间以图书馆通知为准。",
+    "latitude": 23.716633,
+    "longitude": 113.085429,
+    "coordinate_source": "AMap POI",
+    "coordinate_accuracy": "exact",
+    "coordinate_verified_at": "2026-08-09T00:00:00+08:00",
+    "coordinate_verified_by": "product-audit",
+    "coordinate_note": "高德 POI：广东金融学院(清远校区)-图书馆",
+    "amap_poi_id": "B0H2LS4YAO",
+    "source_references": [{"title": "高德地图：清远校区图书馆", "url": "https://www.amap.com/place/B0H2LS4YAO", "publisher": "高德地图", "source_type": "amap_poi", "verified_at": "2026-08-09T00:00:00+08:00", "confidence": 0.96, "is_official": false}],
+    "verification_method": "amap_poi_audit",
+    "verified_at": "2026-08-09T00:00:00+08:00",
+    "freshness_status": "current",
+    "confidence": 0.96,
+    "is_active": true,
+    "data_status": "amap_verified"
   },
   {
     "id": "qy-canteen-placeholder",
@@ -34,17 +57,16 @@
     "aliases": ["清远食堂", "清远饭堂"],
     "campus": "清远校区",
     "category": "canteen",
-    "area": "校内位置待核验",
-    "map_x": 0.62,
-    "map_y": 0.46,
-    "description": "占位条目，仅用于管理员补录流程演示，不代表官方名称或当前营业状态。",
+    "area": "校内具体位置待核验",
+    "description": "仅确认校区存在生活配套，正式名称、点位和运营状态尚未核验。",
+    "coordinate_accuracy": "unknown",
     "source_references": [],
     "verification_method": "unverified_seed",
     "verified_at": null,
     "freshness_status": "needs_verification",
     "confidence": 0.0,
     "is_active": true,
-    "data_status": "demo_fixture"
+    "data_status": "needs_verification"
   },
   {
     "id": "qy-minxue-building",
@@ -52,26 +74,15 @@
     "aliases": ["清远敏学楼"],
     "campus": "清远校区",
     "category": "teaching_building",
-    "area": "校内位置待核验",
-    "map_x": 0.45,
-    "map_y": 0.58,
-    "description": "校区历史通知曾提及该建筑；坐标与开放状态待人工复核。",
-    "source_references": [
-      {
-        "title": "关于清远校区敏学楼封闭考场的通知（本地历史资料）",
-        "url": "",
-        "publisher": "本地历史资料",
-        "published_at": null,
-        "source_level": 8,
-        "is_official": false,
-        "source_status": "historical"
-      }
-    ],
+    "area": "校内具体位置待核验",
+    "description": "历史通知提及该建筑，尚未取得可信坐标。",
+    "coordinate_accuracy": "unknown",
+    "source_references": [],
     "verification_method": "unverified_seed",
     "verified_at": null,
     "freshness_status": "needs_verification",
     "confidence": 0.3,
     "is_active": true,
-    "data_status": "demo_fixture"
+    "data_status": "historical"
   }
 ]

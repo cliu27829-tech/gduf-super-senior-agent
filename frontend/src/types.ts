@@ -56,6 +56,12 @@ export type Location = {
   verification_status: string;
   verification_method: string;
   verified_at: string | null;
+  coordinate_source: string;
+  coordinate_accuracy: "exact" | "approximate" | "area_only" | "unknown";
+  coordinate_verified_at: string | null;
+  coordinate_verified_by: string;
+  coordinate_note: string;
+  amap_poi_id: string;
   confidence: number;
   freshness_status: string;
   data_status: string;
@@ -94,6 +100,7 @@ export type Canteen = {
   data_status: string;
   verified_at: string | null;
   confidence: number;
+  location: Location | null;
   source: Source | null;
   stalls: Stall[];
   today_menu_available: false;
@@ -112,6 +119,10 @@ export type Task = {
   submission_target: string;
   submission_method: string;
   file_naming: string;
+  conditions: string[];
+  evidence_requirements: string[];
+  is_expired: boolean;
+  source_title: string;
   source_text: string;
   source_url: string;
   status: "pending" | "completed";
@@ -142,20 +153,53 @@ export type CampusProcess = {
   source: Source | null;
 };
 
-export type NotificationDraft = {
+export type NotificationNotice = {
   title: string;
+  notice_date_text: string;
+  notice_date: string | null;
+  publisher: string;
+  campuses: string[];
+  audience: string[];
+  category: string;
+  summary: string;
+};
+
+export type NotificationActionItem = {
+  title: string;
+  action: string;
+  audience: string[];
+  conditions: string[];
+  deadline_text: string;
   deadline: string | null;
   location: string;
   materials: string[];
+  evidence_requirements: string[];
   submission_target: string;
   submission_method: string;
   file_naming: string;
-  notes: string;
+  notes: string[];
   source_text: string;
+  source_title: string;
   source_url: string;
   needs_confirmation: boolean;
+  is_expired: boolean;
   confidence: number;
   date_explanation: string;
+};
+
+export type NotificationParseResult = {
+  notice: NotificationNotice;
+  rules: string[];
+  action_items: NotificationActionItem[];
+  deadlines: {
+    text: string;
+    deadline: string | null;
+    action_title: string;
+    is_expired: boolean;
+    needs_confirmation: boolean;
+  }[];
+  warnings: string[];
+  extraction_mode: "llm" | "rules" | "none";
 };
 
 export type KnowledgeSource = {

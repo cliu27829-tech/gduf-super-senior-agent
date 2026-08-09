@@ -51,7 +51,7 @@ async def parse_notification(
         combined = "\n".join(filter(None, [combined, extracted]))
     if not combined:
         raise HTTPException(status_code=422, detail="请粘贴通知或上传 TXT/PDF")
-    drafts, mode, warning = NotificationService().extract(combined, source_url)
+    result = await NotificationService().extract(combined, source_url)
     if file:
         db.add(UploadedDocument(
             user_id=user.id,
@@ -59,31 +59,37 @@ async def parse_notification(
             content_type=(file.content_type or "application/octet-stream")[:120],
             size_bytes=len(payload),
             content_hash=sha256(payload).hexdigest(),
-            extraction_status=mode,
+            extraction_status=result.extraction_mode,
         ))
         db.commit()
-    return NotificationParseResponse(drafts=drafts, extraction_mode=mode, warning=warning)
+    return result
 
 
 @router.post("/confirm", response_model=list[TaskRead], status_code=status.HTTP_201_CREATED)
 def confirm_notification(payload: NotificationConfirmRequest, user: CurrentUser, db: DbSession) -> list[Task]:
     if not payload.confirmed:
         raise HTTPException(status_code=422, detail="保存任务前必须明确确认")
+    if any(item.is_expired for item in payload.action_items) and not payload.allow_expired:
+        raise HTTPException(status_code=422, detail="通知已经过期，默认不保存；如仍需补交，请手动确认保存过期任务")
     tasks: list[Task] = []
-    for draft in payload.drafts:
+    for item in payload.action_items:
         task = Task(
             user_id=user.id,
-            title=draft.title,
-            deadline=draft.deadline,
-            location=draft.location,
-            description=draft.notes,
-            materials=draft.materials,
-            submission_target=draft.submission_target,
-            submission_method=draft.submission_method,
-            file_naming=draft.file_naming,
-            source_text=draft.source_text,
-            source_url=draft.source_url,
-            needs_confirmation=draft.needs_confirmation,
+            title=item.title,
+            deadline=item.deadline,
+            location=item.location,
+            description="\n".join([item.action, *item.notes]).strip(),
+            materials=item.materials,
+            submission_target=item.submission_target,
+            submission_method=item.submission_method,
+            file_naming=item.file_naming,
+            conditions=item.conditions,
+            evidence_requirements=item.evidence_requirements,
+            is_expired=item.is_expired,
+            source_title=item.source_title,
+            source_text=item.source_text,
+            source_url=item.source_url,
+            needs_confirmation=item.needs_confirmation,
         )
         db.add(task)
         db.flush()

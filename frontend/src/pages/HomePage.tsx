@@ -5,10 +5,10 @@ import { useAuth } from "../auth";
 import type { Campus } from "../types";
 
 const entrances = [
-  { icon: "问", title: "AI 对话", detail: "识别意图并调用校园地点、饭堂、流程与任务工具", href: "/chat" },
-  { icon: "⌖", title: "查校园", detail: "按校区搜索地点、饭堂和已核验来源", href: "/map" },
-  { icon: "文", title: "处理通知", detail: "把通知拆成可修改、可确认的任务", href: "/notifications" },
-  { icon: "✓", title: "我的任务", detail: "查看截止时间并导出双重提醒日历", href: "/tasks" },
+  { icon: "问", title: "问大师兄", detail: "学习方法、校园地点和办事问题都可以直接问", href: "/chat" },
+  { icon: "⌖", title: "查校园", detail: "找到有来源的地点，并对精确点位发起导航", href: "/map" },
+  { icon: "文", title: "处理通知", detail: "分清重要规则和真正要做的事，再确认保存", href: "/notifications" },
+  { icon: "食", title: "校园生活", detail: "查看饭堂、常见餐品和信息核验状态", href: "/canteens" },
 ];
 
 export default function HomePage() {

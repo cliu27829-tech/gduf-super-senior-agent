@@ -121,7 +121,9 @@ def submit_feedback(payload: FeedbackCreate, user: CurrentUser, db: DbSession) -
 
 @router.get("/canteens", response_model=list[CanteenRead])
 def list_canteens(db: DbSession, campus_id: str | None = None, q: str = "") -> list[CanteenRead]:
-    query = select(Canteen).options(selectinload(Canteen.stalls), selectinload(Canteen.source)).where(
+    query = select(Canteen).options(
+        selectinload(Canteen.stalls), selectinload(Canteen.source), selectinload(Canteen.location)
+    ).where(
         Canteen.is_active.is_(True), Canteen.data_status != "demo_fixture"
     )
     if campus_id:
@@ -139,7 +141,9 @@ def list_canteens(db: DbSession, campus_id: str | None = None, q: str = "") -> l
 
 @router.get("/canteens/{canteen_id}", response_model=CanteenRead)
 def get_canteen(canteen_id: str, db: DbSession) -> CanteenRead:
-    item = db.scalar(select(Canteen).options(selectinload(Canteen.stalls), selectinload(Canteen.source)).where(
+    item = db.scalar(select(Canteen).options(
+        selectinload(Canteen.stalls), selectinload(Canteen.source), selectinload(Canteen.location)
+    ).where(
         Canteen.id == canteen_id, Canteen.is_active.is_(True), Canteen.data_status != "demo_fixture"
     ))
     if not item:

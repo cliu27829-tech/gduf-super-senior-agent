@@ -16,6 +16,10 @@ class TaskBase(BaseModel):
     submission_target: str = Field(default="", max_length=255)
     submission_method: str = Field(default="", max_length=255)
     file_naming: str = Field(default="", max_length=255)
+    conditions: list[str] = Field(default_factory=list, max_length=50)
+    evidence_requirements: list[str] = Field(default_factory=list, max_length=50)
+    is_expired: bool = False
+    source_title: str = Field(default="", max_length=255)
     source_text: str = Field(default="", max_length=20000)
     source_url: str = Field(default="", max_length=1000)
     needs_confirmation: bool = False
@@ -38,6 +42,10 @@ class TaskUpdate(BaseModel):
     submission_target: str | None = Field(default=None, max_length=255)
     submission_method: str | None = Field(default=None, max_length=255)
     file_naming: str | None = Field(default=None, max_length=255)
+    conditions: list[str] | None = None
+    evidence_requirements: list[str] | None = None
+    is_expired: bool | None = None
+    source_title: str | None = Field(default=None, max_length=255)
     source_text: str | None = Field(default=None, max_length=20000)
     source_url: str | None = Field(default=None, max_length=1000)
     status: str | None = Field(default=None, pattern=r"^(pending|completed)$")
@@ -58,6 +66,10 @@ class TaskRead(BaseModel):
     submission_target: str
     submission_method: str
     file_naming: str
+    conditions: list[str]
+    evidence_requirements: list[str]
+    is_expired: bool
+    source_title: str
     source_text: str
     source_url: str
     status: str

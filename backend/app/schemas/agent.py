@@ -38,6 +38,9 @@ class AgentChatResponse(BaseModel):
     conversation_id: str
     message_id: str
     intent: str
+    plan: list[str] = Field(default_factory=list)
+    tools_called: list[str] = Field(default_factory=list)
+    tool_success: dict[str, bool] = Field(default_factory=dict)
     answer: str
     tool_results: list[ToolResult] = Field(default_factory=list)
     sources: list[dict] = Field(default_factory=list)
@@ -51,28 +54,58 @@ class AgentChatResponse(BaseModel):
     current_time: datetime
 
 
-class NotificationDraft(BaseModel):
-    title: str
-    deadline: datetime | None
-    location: str = ""
-    materials: list[str] = Field(default_factory=list)
-    submission_target: str = ""
-    submission_method: str = ""
-    file_naming: str = ""
-    notes: str = ""
-    source_text: str = ""
-    source_url: str = ""
+class NotificationNotice(BaseModel):
+    title: str = Field(default="", max_length=255)
+    notice_date_text: str = Field(default="", max_length=80)
+    notice_date: datetime | None = None
+    publisher: str = Field(default="", max_length=255)
+    campuses: list[str] = Field(default_factory=list, max_length=10)
+    audience: list[str] = Field(default_factory=list, max_length=30)
+    category: str = Field(default="", max_length=100)
+    summary: str = Field(default="", max_length=1000)
+
+
+class NotificationActionItem(BaseModel):
+    title: str = Field(min_length=1, max_length=180)
+    action: str = Field(default="", max_length=2000)
+    audience: list[str] = Field(default_factory=list, max_length=30)
+    conditions: list[str] = Field(default_factory=list, max_length=30)
+    deadline_text: str = Field(default="", max_length=120)
+    deadline: datetime | None = None
+    location: str = Field(default="", max_length=255)
+    submission_method: str = Field(default="", max_length=255)
+    submission_target: str = Field(default="", max_length=255)
+    file_naming: str = Field(default="", max_length=255)
+    materials: list[str] = Field(default_factory=list, max_length=50)
+    evidence_requirements: list[str] = Field(default_factory=list, max_length=50)
+    notes: list[str] = Field(default_factory=list, max_length=50)
+    confidence: float = Field(default=0.0, ge=0, le=1)
     needs_confirmation: bool = False
-    confidence: float = 0.0
-    date_explanation: str = ""
+    is_expired: bool = False
+    date_explanation: str = Field(default="", max_length=1000)
+    source_title: str = Field(default="", max_length=255)
+    source_text: str = Field(default="", max_length=20000)
+    source_url: str = Field(default="", max_length=1000)
+
+
+class NotificationDeadline(BaseModel):
+    text: str = Field(default="", max_length=120)
+    deadline: datetime | None = None
+    action_title: str = Field(default="", max_length=180)
+    is_expired: bool = False
+    needs_confirmation: bool = False
 
 
 class NotificationParseResponse(BaseModel):
-    drafts: list[NotificationDraft]
+    notice: NotificationNotice
+    rules: list[str] = Field(default_factory=list, max_length=100)
+    action_items: list[NotificationActionItem] = Field(default_factory=list, max_length=50)
+    deadlines: list[NotificationDeadline] = Field(default_factory=list, max_length=50)
+    warnings: list[str] = Field(default_factory=list, max_length=50)
     extraction_mode: str
-    warning: str = ""
 
 
 class NotificationConfirmRequest(BaseModel):
-    drafts: list[NotificationDraft] = Field(min_length=1, max_length=50)
+    action_items: list[NotificationActionItem] = Field(min_length=1, max_length=50)
     confirmed: bool
+    allow_expired: bool = False

@@ -59,7 +59,7 @@ def _source(db: Session, data: dict, confidence: float = 0.0) -> Source:
 
 
 def _verification_status(data_status: str) -> str:
-    return "verified" if data_status in {"official", "admin_verified", "user_verified"} else "needs_verification"
+    return "verified" if data_status in {"official", "amap_verified", "admin_verified", "user_verified"} else "needs_verification"
 
 
 def seed_database(db: Session) -> None:
@@ -109,6 +109,12 @@ def seed_database(db: Session) -> None:
             location.verification_status = _verification_status(status)
             location.verification_method = item.get("verification_method", "unverified_seed")
             location.verified_at = _date(item.get("verified_at"))
+            location.coordinate_source = item.get("coordinate_source", "")
+            location.coordinate_accuracy = item.get("coordinate_accuracy", "unknown")
+            location.coordinate_verified_at = _date(item.get("coordinate_verified_at"))
+            location.coordinate_verified_by = item.get("coordinate_verified_by", "")
+            location.coordinate_note = item.get("coordinate_note", "")
+            location.amap_poi_id = item.get("amap_poi_id", "")
             location.confidence = float(item.get("confidence", 0))
             location.freshness_status = item.get("freshness_status", "needs_verification")
             location.data_status = status

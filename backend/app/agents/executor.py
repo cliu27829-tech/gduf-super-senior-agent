@@ -41,7 +41,13 @@ class AgentExecutor:
             location_result = self._legacy("search_campus_locations", self.legacy._locations(message, campus_id))
             results = [location_result]
             rows = location_result.data if isinstance(location_result.data, list) else []
-            coordinates = [row for row in rows if row.get("latitude") is not None and row.get("longitude") is not None]
+            coordinates = [
+                row for row in rows
+                if row.get("latitude") is not None
+                and row.get("longitude") is not None
+                and row.get("coordinate_accuracy") == "exact"
+                and row.get("coordinate_verified_at")
+            ]
             if len(coordinates) >= 2:
                 results.append(await self.registry.execute(
                     "calculate_walking_route",

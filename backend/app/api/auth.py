@@ -193,6 +193,8 @@ def change_password(payload: ChangePasswordRequest, response: Response, user: Cu
 
 @router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
 def delete_account(response: Response, user: CurrentUser, db: DbSession) -> Response:
+    if user.role == "admin":
+        raise HTTPException(status_code=409, detail="管理员账号包含审计记录，不能在个人中心自助删除")
     db.delete(user)
     db.commit()
     _clear_cookies(response)

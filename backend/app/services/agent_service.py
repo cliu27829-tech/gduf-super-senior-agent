@@ -153,6 +153,9 @@ class AgentService:
                 "longitude": row.longitude,
                 "map_x": row.map_x,
                 "map_y": row.map_y,
+                "coordinate_accuracy": row.coordinate_accuracy,
+                "coordinate_source": row.coordinate_source,
+                "coordinate_verified_at": row.coordinate_verified_at.isoformat() if row.coordinate_verified_at else None,
                 "verification_status": row.verification_status,
                 "data_status": row.data_status,
                 "verified_at": row.verified_at.isoformat() if row.verified_at else None,
@@ -292,6 +295,8 @@ class AgentService:
         process_terms = {
             "校园卡": ("校园卡", "补卡", "挂失", "丢卡", "卡丢了"),
             "报修": ("报修", "维修", "坏了"),
+            "校园网络": ("校园网", "网络", "宽带", "断网", "上不了网"),
+            "图书馆": ("图书馆", "借书", "还书", "续借"),
             "请假": ("请假", "销假"),
             "证明": ("证明", "盖章", "在读证明"),
         }

@@ -46,6 +46,8 @@ def _task_data(task: Task) -> dict[str, Any]:
         "deadline": task.deadline, "location": task.location, "course": task.course, "task_type": task.task_type,
         "materials": task.materials, "submission_target": task.submission_target,
         "submission_method": task.submission_method, "file_naming": task.file_naming,
+        "conditions": task.conditions, "evidence_requirements": task.evidence_requirements,
+        "is_expired": task.is_expired, "source_title": task.source_title,
         "source_text": task.source_text, "source_url": task.source_url, "status": task.status,
     }
 
@@ -91,6 +93,8 @@ class AgentToolbox:
             "floor": row.floor, "latitude": row.latitude, "longitude": row.longitude,
             "opening_hours": row.opening_hours, "services": row.services, "phone": row.phone,
             "verification_status": row.verification_status, "data_status": row.data_status,
+            "coordinate_accuracy": row.coordinate_accuracy, "coordinate_source": row.coordinate_source,
+            "coordinate_verified_at": row.coordinate_verified_at,
             "verified_at": row.verified_at, "updated_at": row.updated_at,
         } for row in rows]
         sources = [item for row in rows for source in row.sources if (item := _source(source))]
@@ -114,6 +118,7 @@ class AgentToolbox:
         rows = list(self.db.scalars(select(Location).where(
             Location.campus_id == self.campus_id, Location.is_active.is_(True),
             Location.data_status != "demo_fixture", Location.latitude.is_not(None), Location.longitude.is_not(None),
+            Location.coordinate_accuracy.in_(("exact", "approximate")), Location.coordinate_verified_at.is_not(None),
         )))
         from app.api.campus import _distance
         data = sorted(({
@@ -135,7 +140,9 @@ class AgentToolbox:
         destination = self.db.get(Location, destination_location_id)
         if not origin or not destination or origin.campus_id != self.campus_id or destination.campus_id != self.campus_id:
             return ToolResponse(tool_name="calculate_walking_route", success=False, error="not_found", summary="起点或终点不属于当前校区")
-        if None in (origin.longitude, origin.latitude, destination.longitude, destination.latitude):
+        if None in (origin.longitude, origin.latitude, destination.longitude, destination.latitude) or any(
+            row.coordinate_accuracy != "exact" or row.coordinate_verified_at is None for row in (origin, destination)
+        ):
             return ToolResponse(tool_name="calculate_walking_route", success=False, error="unverified_coordinates", summary="起点或终点没有经过核验的真实坐标")
         try:
             data = await MapService.configured().walking_route(
@@ -148,7 +155,7 @@ class AgentToolbox:
 
     def build_navigation_link(self, location_id: str = "", **_: Any) -> ToolResponse:
         row = self.db.get(Location, location_id)
-        if not row or row.campus_id != self.campus_id or None in (row.longitude, row.latitude):
+        if not row or row.campus_id != self.campus_id or None in (row.longitude, row.latitude) or row.coordinate_accuracy != "exact" or row.coordinate_verified_at is None:
             return ToolResponse(tool_name="build_navigation_link", success=False, error="unverified_coordinates", summary="地点缺少可用于导航的真实坐标")
         url = MapService.navigation_link(row.name, float(row.longitude), float(row.latitude))
         return self._ok("build_navigation_link", {"url": url, "location_id": row.id}, "已生成高德外部导航链接", verification={"provider": "amap_uri"})
@@ -310,10 +317,17 @@ class AgentToolbox:
         rows = list(self.db.scalars(select(Task).where(Task.user_id == self.user.id, Task.status == "pending", Task.deadline >= current, Task.deadline <= end)))
         return self._ok("list_upcoming_tasks", [_task_data(row) for row in rows], f"未来 {days} 天有 {len(rows)} 条任务")
 
-    def extract_tasks_from_notification(self, text: str = "", source_url: str = "", **_: Any) -> ToolResponse:
-        drafts, mode, warning = NotificationService().extract(text, source_url)
-        data = [draft.model_dump(mode="json") for draft in drafts]
-        return self._ok("extract_tasks_from_notification", data, "已生成任务预览，尚未写入数据库" + (f"；{warning}" if warning else ""), verification={"mode": mode, "persisted": False}, action=True)
+    async def extract_tasks_from_notification(self, text: str = "", source_url: str = "", **_: Any) -> ToolResponse:
+        result = await NotificationService().extract(text, source_url)
+        data = result.model_dump(mode="json")
+        warning = "；".join(result.warnings)
+        return self._ok(
+            "extract_tasks_from_notification",
+            data,
+            "已区分通知规则和真正待办，尚未写入数据库" + (f"；{warning}" if warning else ""),
+            verification={"mode": result.extraction_mode, "persisted": False, "action_count": len(result.action_items)},
+            action=bool(result.action_items),
+        )
 
     def parse_deadline(self, text: str = "", **_: Any) -> ToolResponse:
         parsed = parse_relative_datetime(text, now_china())
@@ -459,7 +473,7 @@ class AgentToolbox:
         return self._confirmation(
             "import_local_documents",
             "本地文件导入必须由你在知识库导入页明确选择文件；Agent 不会自行扫描电脑或微信数据库。",
-            {"action_url": "/knowledge/import", "accepted": ["md", "txt", "html", "mhtml", "pdf", "docx", "json", "csv"]},
+            {"action_url": "", "availability": "admin_or_internal_only", "accepted": ["md", "txt", "html", "mhtml", "pdf", "docx", "json", "csv"]},
         )
 
     def import_text_content(

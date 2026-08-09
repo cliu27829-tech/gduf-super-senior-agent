@@ -7,7 +7,6 @@ import CanteensPage from "./pages/CanteensPage";
 import ChatPage from "./pages/ChatPage";
 import DashboardPage from "./pages/DashboardPage";
 import HomePage from "./pages/HomePage";
-import KnowledgePage from "./pages/KnowledgePage";
 import MapPage from "./pages/MapPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -31,8 +30,6 @@ export default function App() {
         <Route path="notifications" element={protect(<NotificationsPage />)} />
         <Route path="tasks" element={protect(<TasksPage />)} />
         <Route path="processes" element={protect(<ProcessesPage />)} />
-        <Route path="knowledge/import" element={protect(<KnowledgePage mode="import" />)} />
-        <Route path="knowledge/sources" element={protect(<KnowledgePage mode="sources" />)} />
         <Route path="profile" element={protect(<ProfilePage />)} />
         <Route path="admin/*" element={protectAdmin(<AdminPage />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
