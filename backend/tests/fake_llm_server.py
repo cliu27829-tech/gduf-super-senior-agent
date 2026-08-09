@@ -5,6 +5,7 @@ import time
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
+from fastapi.responses import StreamingResponse
 
 
 app = FastAPI()
@@ -33,7 +34,7 @@ def health() -> dict[str, str]:
 
 
 @app.post("/chat/completions")
-async def chat_completions(request: Request) -> dict:
+async def chat_completions(request: Request):
     payload = await request.json()
     messages = payload.get("messages", [])
     system = messages[0].get("content", "") if messages else ""
@@ -56,7 +57,7 @@ async def chat_completions(request: Request) -> dict:
     else:
         content = "你好，我是广金大师兄。我可以陪你多轮讨论学习问题，并在校园事实问题上使用后端工具查询。"
 
-    return {
+    response = {
         "id": f"chatcmpl-{uuid4().hex}",
         "object": "chat.completion",
         "created": int(time.time()),
@@ -64,3 +65,40 @@ async def chat_completions(request: Request) -> dict:
         "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
         "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
     }
+    if not payload.get("stream"):
+        return response
+
+    async def events():
+        stream_id = response["id"]
+        # Include a reasoning-only chunk to verify clients do not expose it.
+        reasoning = {
+            "id": stream_id,
+            "object": "chat.completion.chunk",
+            "created": response["created"],
+            "model": response["model"],
+            "choices": [{"index": 0, "delta": {"reasoning_content": "internal-test-reasoning"}, "finish_reason": None}],
+        }
+        yield f"data: {json.dumps(reasoning, ensure_ascii=False)}\n\n"
+        midpoint = max(1, len(content) // 2)
+        for part in (content[:midpoint], content[midpoint:]):
+            if not part:
+                continue
+            chunk = {
+                "id": stream_id,
+                "object": "chat.completion.chunk",
+                "created": response["created"],
+                "model": response["model"],
+                "choices": [{"index": 0, "delta": {"content": part}, "finish_reason": None}],
+            }
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+        finished = {
+            "id": stream_id,
+            "object": "chat.completion.chunk",
+            "created": response["created"],
+            "model": response["model"],
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        }
+        yield f"data: {json.dumps(finished, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream")
