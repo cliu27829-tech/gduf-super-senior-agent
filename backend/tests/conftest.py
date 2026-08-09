@@ -46,7 +46,8 @@ class MockLLMClient:
             ("knowledge_search", ("知识库", "查资料", "四六级报名")),
             ("notification_to_tasks", ("通知", "提交课程报告", "生成任务")),
             ("task_management", ("我的任务", "待办", "已完成", "逾期")),
-            ("campus_process", ("校园卡", "挂失", "补办", "报修")),
+            ("campus_process", ("校园卡", "挂失", "补办", "报修", "校园网", "网络故障", "借书", "还书", "续借")),
+            ("campus_navigation", ("怎么走", "导航", "路线")),
             ("food_search", ("有什么吃", "面", "肠粉", "早餐", "菜品")),
             ("canteen_search", ("饭堂", "食堂", "餐厅")),
             ("campus_location_search", ("在哪里", "在哪", "快递", "医务室", "图书馆")),
@@ -71,7 +72,7 @@ class MockLLMClient:
         if response_format:
             intent = self._intent(user_message)
             tool_plan = [intent] if intent in {
-                "campus_location_search", "canteen_search", "food_search", "campus_process",
+                "campus_location_search", "campus_navigation", "canteen_search", "food_search", "campus_process",
                 "knowledge_search", "knowledge_import",
             } else []
             return json.dumps({"intent": intent, "confidence": 0.99, "query": user_message, "tool_plan": tool_plan})

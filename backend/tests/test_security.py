@@ -43,6 +43,14 @@ def test_account_deletion_revokes_access(client: TestClient, register_user):
     assert client.get("/api/auth/me").status_code == 401
 
 
+def test_admin_account_cannot_bypass_audit_retention(client: TestClient, login_admin):
+    login_admin()
+    response = client.delete("/api/auth/account")
+    assert response.status_code == 409
+    assert "审计记录" in response.json()["detail"]
+    assert client.get("/api/auth/me").status_code == 200
+
+
 def test_security_headers_and_request_id(client: TestClient):
     response = client.get("/api/health")
     assert response.headers["x-content-type-options"] == "nosniff"

@@ -36,25 +36,13 @@ frontend/test-results/
 frontend/*.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
+frontend-dev.out.log
+frontend-dev.err.log
+backend-dev.out.log
+backend-dev.err.log
+
+# 大批量学生媒体原始抓取仅保留在本机；仓库只保留 data/curated 中的短事实。
+好人师兄/
 backend/.pytest_cache/
 backend/.coverage
 backend/htmlcov/
-
-# 好人师兄文件夹：只推送 .md 和 .txt 文件，排除大文件
-好人师兄/*.mhtml
-好人师兄/*.docx
-好人师兄/*.pdf
-好人师兄/*.html
-好人师兄/*.jpg
-好人师兄/*.png
-好人师兄/*.jpeg
-好人师兄/*.gif
-好人师兄/**/*.mp4
-好人师兄/**/*.mhtml
-好人师兄/**/*.docx
-好人师兄/**/*.pdf
-好人师兄/**/*.html
-好人师兄/**/*.jpg
-好人师兄/**/*.png
-好人师兄/**/*.jpeg
-好人师兄/**/*.gif

@@ -78,11 +78,11 @@ test("registers and completes the three real MVP workflows", async ({ page, requ
   await expect(
     page.getByLabel(/高德真实道路地图/).or(page.getByRole("heading", { name: "需要配置高德地图凭据" })),
   ).toBeVisible();
-  await expect(page.getByText("北苑饭堂", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /北苑饭堂/ })).toBeVisible();
 
   await page.getByRole("link", { name: "办事流程" }).first().click();
   await page.getByRole("button", { name: /校园卡丢失挂失与补卡/ }).click();
-  await expect(page.getByText("校园卡丢卡挂失补卡流程")).toBeVisible();
+  await expect(page.getByText("校园卡办理流程")).toBeVisible();
   const processTasksResponse = page.waitForResponse((response) =>
     response.url().includes("/create-tasks") && response.request().method() === "POST",
   );
@@ -91,19 +91,19 @@ test("registers and completes the three real MVP workflows", async ({ page, requ
   await expect(page.getByText(/已保存 \d+ 条任务/)).toBeVisible();
 
   await page.getByRole("link", { name: "处理通知" }).first().click();
-  await page.getByLabel("通知文本").fill("请各班同学于2099年9月3日下午5点前提交学生信息表，文件命名为学号+姓名，发送给班长。材料：学生信息表");
+  await page.getByLabel("通知原文").fill("请各班同学于2099年9月3日下午5点前提交学生信息表，文件命名为学号+姓名，发送给班长。材料：学生信息表");
   await page.getByRole("button", { name: "解析通知" }).click();
-  const title = page.getByLabel("标题").first();
+  const title = page.getByLabel("任务标题").first();
   await expect(title).toBeVisible();
   await title.fill("E2E 学生信息表");
-  await page.getByRole("checkbox", { name: /我已逐项核对/ }).check();
+  await page.getByRole("checkbox", { name: /我已核对任务/ }).check();
   await page.getByRole("button", { name: /确认并保存 1 条任务/ }).click();
   await expect(page.getByRole("heading", { name: "任务已保存" })).toBeVisible();
   await page.getByRole("link", { name: "前往任务中心" }).click();
   await expect(page.getByText("E2E 学生信息表", { exact: true })).toBeVisible();
 
   await page.locator("article.task-table-row").filter({ hasText: "E2E 学生信息表" }).getByRole("button", { name: "编辑" }).click();
-  await page.getByLabel("标题").fill("E2E 已编辑任务");
+  await page.getByRole("textbox", { name: "标题", exact: true }).fill("E2E 已编辑任务");
   await page.getByLabel("提交方式").fill("班群文件");
   await page.getByRole("button", { name: "保存任务" }).click();
   await expect(page.getByText("E2E 已编辑任务", { exact: true })).toBeVisible();

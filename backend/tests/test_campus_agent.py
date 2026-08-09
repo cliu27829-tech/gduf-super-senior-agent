@@ -96,6 +96,9 @@ def test_agent_routes_location_food_and_campus_card_process_to_tools(client: Tes
     assert location.status_code == 200
     assert location.json()["intent"] == "campus_location_search"
     assert location.json()["tool_results"][0]["tool"] == "location_search"
+    assert location.json()["plan"] == ["search_campus_locations"]
+    assert location.json()["tools_called"] == ["search_campus_locations"]
+    assert location.json()["tool_success"] == {"search_campus_locations": True}
     assert all(item["data_status"] != "demo_fixture" for item in location.json()["tool_results"][0]["data"])
     assert location.json()["locations"]
     assert location.json()["map_action"]["type"] == "focus_location"
@@ -115,7 +118,8 @@ def test_agent_routes_location_food_and_campus_card_process_to_tools(client: Tes
     distance = client.post("/api/agent/chat", json={"message": "哪个饭堂离北教比较近？", "campus_id": campus_id})
     assert distance.status_code == 200
     assert distance.json()["intent"] == "canteen_search"
-    assert "非测绘示意坐标" in distance.json()["answer"]
+    assert "非测绘示意坐标" not in distance.json()["answer"]
+    assert "schematic_distance" not in str(distance.json()["tool_results"])
     assert distance.json()["tool_results"][0]["data"][0]["name"] == "北苑饭堂"
 
 

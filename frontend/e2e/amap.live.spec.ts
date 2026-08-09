@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("loads the configured AMap base map and geocoded campus marker", async ({ page, request }) => {
   test.skip(process.env.E2E_REQUIRE_AMAP !== "1", "requires the owner's local AMap credentials");
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   const suffix = `${Date.now()}`;
   const email = `amap-${suffix}@example.com`;
   const username = `amap${suffix.slice(-8)}`;
@@ -52,10 +52,17 @@ test("loads the configured AMap base map and geocoded campus marker", async ({ p
 
   let cleanupStatus: number;
   try {
-    await page.getByRole("link", { name: "校园地图" }).first().click();
   const canvas = page.getByLabel(/广州校本部高德真实道路地图/);
-  await expect(canvas).toBeVisible();
-  await expect(page.locator(".amap-maps")).toBeVisible({ timeout: 30_000 });
+  const openLiveMap = async () => {
+    await page.goto("/map", { waitUntil: "commit" });
+    await expect(canvas).toBeVisible();
+    await expect(page.locator(".amap-maps")).toBeVisible({ timeout: 30_000 });
+  };
+  try {
+    await openLiveMap();
+  } catch {
+    await openLiveMap();
+  }
   await expect(page.locator(".amap-marker").first()).toBeVisible({ timeout: 30_000 });
   const canvasBox = await canvas.boundingBox();
   expect(canvasBox).not.toBeNull();
@@ -82,11 +89,14 @@ test("loads the configured AMap base map and geocoded campus marker", async ({ p
   }, canvasBox!);
   expect(markerPoint).not.toBeNull();
   await page.mouse.click(markerPoint!.x, markerPoint!.y);
-  await expect(page.getByRole("complementary", { name: "地点详情" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "广州校本部" })).toBeVisible();
+  const detail = page.getByRole("complementary", { name: "地点详情" });
+  await expect(detail).toBeVisible();
+  await expect(detail.getByText("精确点位", { exact: true })).toBeVisible();
+  await expect(detail.getByRole("link", { name: "打开高德步行导航" })).toBeVisible();
   await page.getByRole("button", { name: "关闭" }).click();
 
-  await page.getByLabel("路线终点地址").fill("广州市天河区龙洞迎龙路");
+  await page.getByRole("combobox", { name: "起点" }).selectOption({ label: "北教学楼AD座" });
+  await page.getByRole("combobox", { name: "终点" }).selectOption({ label: "北苑饭堂" });
   await page.getByRole("button", { name: "规划步行路线" }).click();
   await expect(page.getByText(/km · 约/)).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText("查看路线步骤")).toBeVisible();

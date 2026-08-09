@@ -82,6 +82,10 @@ def test_tool_execution_pipeline_is_remembered(client: TestClient, register_user
         assert rows[0].verification["pipeline"] == [
             "observe", "classify", "plan", "execute", "verify", "confirm", "remember", "respond",
         ]
+        assert rows[0].verification["intent"] == "task_management"
+        assert rows[0].verification["plan"] == ["list_tasks"]
+        assert rows[0].verification["tools_called"] == ["list_tasks"]
+        assert rows[0].verification["tool_success"] == {"list_tasks": True}
 
 
 def test_upload_records_only_metadata_not_document_text(client: TestClient, register_user):
@@ -119,3 +123,62 @@ def test_amap_route_parser_uses_mocked_provider(monkeypatch):
     assert result["distance_meters"] == 800
     assert result["duration_seconds"] == 600
     assert result["polyline"] == [[113.1, 23.1], [113.2, 23.2]]
+
+
+def test_admin_exact_coordinate_requires_traceable_evidence(client: TestClient, login_admin, campus_id: str):
+    login_admin()
+    missing = client.post("/api/admin/locations", json={
+        "id": "test-coordinate-evidence",
+        "campus_id": campus_id,
+        "name": "测试坐标点",
+        "category": "other",
+        "latitude": 23.2,
+        "longitude": 113.38,
+        "coordinate_accuracy": "exact",
+        "coordinate_source": "AMap POI",
+    })
+    assert missing.status_code == 422
+    created = client.post("/api/admin/locations", json={
+        "id": "test-coordinate-evidence",
+        "campus_id": campus_id,
+        "name": "测试坐标点",
+        "category": "other",
+        "latitude": 23.2,
+        "longitude": 113.38,
+        "coordinate_accuracy": "exact",
+        "coordinate_source": "AMap POI",
+        "amap_poi_id": "TEST-POI",
+        "evidence": "高德 POI 名称和卫星图复核",
+        "verification_note": "自动测试",
+    })
+    assert created.status_code == 201, created.text
+    assert created.json()["coordinate_accuracy"] == "exact"
+    assert created.json()["coordinate_source"] == "AMap POI"
+
+
+def test_agent_core_intents_expose_plan_and_tool_outcomes(client: TestClient, register_user, monkeypatch):
+    account = register_user("agent-core-matrix")
+    campus_id = account["user"]["campus_id"]
+
+    class FakeMap:
+        async def walking_route(self, *_args):
+            return {"provider": "amap", "distance_meters": 360, "duration_seconds": 300, "steps": [], "polyline": [[113.381176, 23.202708], [113.383625, 23.202675]]}
+
+    monkeypatch.setattr(MapService, "configured", classmethod(lambda cls: FakeMap()))
+    cases = [
+        ("大一高数跟不上怎么办？", "learning_guidance", [], []),
+        ("快递站在哪里？", "campus_location_search", ["search_campus_locations"], ["search_campus_locations"]),
+        ("饭堂有什么吃？", "food_search", ["search_food"], ["search_food"]),
+        ("这是通知：请提交课程报告", "notification_to_tasks", ["extract_tasks_from_notification", "validate_extracted_tasks"], ["extract_tasks_from_notification"]),
+        ("我的任务有哪些？", "task_management", ["list_tasks"], ["list_tasks"]),
+        ("校园网故障怎么报修？", "campus_process", ["search_campus_processes"], ["search_campus_processes"]),
+        ("从北教去北苑饭堂怎么走？", "campus_navigation", ["search_campus_locations", "calculate_walking_route"], ["search_campus_locations", "calculate_walking_route"]),
+    ]
+    for message, intent, plan, tools in cases:
+        response = client.post("/api/agent/chat", json={"message": message, "campus_id": campus_id})
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["intent"] == intent
+        assert body["plan"] == plan
+        assert body["tools_called"] == tools
+        assert all(body["tool_success"].get(tool) is True for tool in tools)

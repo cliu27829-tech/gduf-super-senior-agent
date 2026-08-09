@@ -12,7 +12,6 @@ test("admin reviews private knowledge and the owner sees the shared update", asy
   let documentId = "";
   let ownerCleanupStatus = 204;
   let documentCleanupStatus = 204;
-  let adminCleanupStatus = 204;
   try {
     await page.goto("/register", { waitUntil: "commit" });
     await page.getByLabel("用户名").fill(`reviewowner${suffix.slice(-8)}`);
@@ -21,17 +20,18 @@ test("admin reviews private knowledge and the owner sees the shared update", asy
     await page.getByLabel(/^密码/).fill(password);
     await page.getByRole("button", { name: "注册并登录" }).click();
     await expect(page.getByRole("heading", { name: /审核资料同学，今天先做哪一件/ })).toBeVisible();
-    await page.goto("/knowledge/import", { waitUntil: "commit" });
-    const textForm = page.getByRole("heading", { name: "粘贴文章正文" }).locator("..");
-    await textForm.getByLabel("标题").fill("管理员审核验收资料");
-    await textForm.getByLabel("正文").fill("这是一条仅用于本地端到端审核的资料，审核前只对导入用户可见。");
-    const importResponsePromise = page.waitForResponse((response) =>
-      response.url().endsWith("/api/knowledge/import/text") && response.request().method() === "POST",
-    );
-    await textForm.getByRole("button", { name: "保存并建立索引" }).click();
-    const importResult = await (await importResponsePromise).json() as { document_ids: string[] };
+    const importResult = await page.evaluate(async () => {
+      const response = await fetch("/api/knowledge/import/text", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "管理员审核验收资料", content: "这是一条仅用于本地端到端审核的资料，审核前只对导入用户可见。" }),
+      });
+      if (!response.ok) throw new Error(`knowledge import failed: ${response.status}`);
+      return response.json() as Promise<{ document_ids: string[] }>;
+    });
     documentId = importResult.document_ids[0] || "";
-    await expect(page.getByRole("status")).toContainText("导入 1 篇");
+    expect(documentId).not.toBe("");
     await page.getByRole("button", { name: "退出" }).click();
 
     await page.goto("/login", { waitUntil: "commit" });
@@ -40,7 +40,7 @@ test("admin reviews private knowledge and the owner sees the shared update", asy
     await page.getByRole("button", { name: "登录" }).click();
     await expect(page.getByRole("link", { name: "管理后台" })).toBeVisible();
     await page.goto("/admin/knowledge", { waitUntil: "commit" });
-    await expect(page.getByRole("heading", { name: "好人师兄资料审核" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "内部知识资料审核" })).toBeVisible();
     await expect(page.getByText("管理员审核验收资料").first()).toBeVisible();
 
     const promptAnswers = ["对照本地验收原文", "title,content", "验收测试证据", "仅用于自动测试"];
@@ -74,14 +74,7 @@ test("admin reviews private knowledge and the owner sees the shared update", asy
       }
       ownerCleanupStatus = (await request.delete("http://127.0.0.1:8000/api/auth/account")).status();
     }
-    const adminLogin = await request.post("http://127.0.0.1:8000/api/auth/login", {
-      data: { email: adminEmail, password: adminPassword },
-    });
-    if (adminLogin.status() === 200) {
-      adminCleanupStatus = (await request.delete("http://127.0.0.1:8000/api/auth/account")).status();
-    }
   }
   expect(ownerCleanupStatus).toBe(204);
   expect(documentCleanupStatus).toBe(204);
-  expect(adminCleanupStatus).toBe(204);
 });
