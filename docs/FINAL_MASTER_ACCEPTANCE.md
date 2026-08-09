@@ -29,7 +29,7 @@
 | Security | PASS | Key 只由环境变量读取；Run 公开结构无 GPS；确认动作白名单、CORS/鉴权/IDOR 测试通过。 |
 | User Isolation | PASS | Conversation、Agent Run、任务、提醒、便签、知识和导出均验证所有权；跨用户 Run 返回 404。 |
 | Admin | PASS | 管理员鉴权、来源证据、校准、审核、导入导出和审计日志后端测试通过；无凭据不会开放管理能力。 |
-| Build | PASS | Python compileall、后端 109 项、前端 29 项、ESLint、TypeScript 和 Vite 正式构建通过。 |
+| Build | PASS | Python compileall、后端 110 项（含空数据库迁移）、前端 29 项、ESLint、TypeScript 和 Vite 正式构建通过。 |
 | E2E | PASS | Playwright 7 项通过：Agent、AMap、定位、IDOR、知识、手机、真实 MVP；管理员浏览器场景因未提供外部测试密码跳过。 |
 | Git | PASS | 安全扫描与 diff 检查通过后提交并推送到现有 PR #1 分支，不创建重复 PR、不自动合并。 |
 
