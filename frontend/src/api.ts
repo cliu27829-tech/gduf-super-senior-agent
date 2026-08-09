@@ -67,7 +67,7 @@ export function apiFileUrl(path: string): string {
   return `${API_URL}/api${path}`;
 }
 
-export type StreamEvent = { event: "stage" | "tool" | "token" | "final" | "error"; data: Record<string, unknown> };
+export type StreamEvent = { event: "run" | "plan" | "stage" | "tool" | "tool_start" | "tool_end" | "verify" | "action" | "token" | "final" | "error"; data: Record<string, unknown> };
 
 export async function streamAgentChat(
   payload: Record<string, unknown>,

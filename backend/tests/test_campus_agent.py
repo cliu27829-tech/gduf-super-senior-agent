@@ -222,6 +222,9 @@ def test_agent_sends_recent_history_for_multi_turn_memory(client: TestClient, re
     )
     assert second.status_code == 200
     assert "小明" in second.json()["answer"]
+    assert second.json()["intent"] == "general_chat"
+    assert second.json()["agent_status"] == "completed"
+    assert second.json()["tools_called"] == []
     answer_call = mock_llm.calls[-1]
     assert any(item["role"] == "user" and "我叫小明" in item["content"] for item in answer_call)
     assert any(item["role"] == "assistant" for item in answer_call)

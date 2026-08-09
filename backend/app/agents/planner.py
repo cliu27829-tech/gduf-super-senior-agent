@@ -51,8 +51,8 @@ class Planner:
                 requested.append("search_express_locations")
             requested.append("calculate_walking_route")
             names = requested
-        names = list(dict.fromkeys(names))[:4]
-        steps = [AgentPlanStep(tool=name, purpose="获取回答所需的可核验信息", arguments={"query": message}) for name in names]
+        names = list(dict.fromkeys(names))[:6]
+        steps = [AgentPlanStep(tool=name, purpose="获取回答所需的可核验信息", reason="该结果是完成用户目标的必要证据", arguments={"query": message}) for name in names]
         confirmation = decision.intent in {"notification_to_tasks", "document_analysis", "knowledge_import", "data_feedback", "reminder_management", "note_management"}
         return AgentPlan(
             intent=decision.intent,
@@ -64,6 +64,7 @@ class Planner:
             risk_level="medium" if confirmation else "low",
             risks=["涉及写入的动作只能返回预览，必须由用户再次确认"] if confirmation else [],
             agent_round=round_number,
+            completion_condition="完成所需工具调用并通过来源、校区和结果完整性核验",
         )
 
     async def build(self, decision: IntentDecision, message: str) -> AgentPlan:
@@ -71,8 +72,8 @@ class Planner:
         prompt = (
             "你是广金大师兄的执行规划器。只输出 JSON，不回答用户。"
             "字段必须是 intent,goal,steps,required_tools,requires_knowledge,requires_confirmation,"
-            "missing_information,risk_level,risks,agent_round。"
-            "steps 每项必须有 tool,purpose,arguments，最多4步。tool只能来自允许列表。"
+            "missing_information,risk_level,risks,agent_round,completion_condition。"
+            "steps 每项必须有 tool,purpose,reason,arguments,required_input,requires_user_action，最多6步。tool只能来自允许列表。"
             "地点、路线、饭堂、学院、校内事实必须使用工具；复杂行程要组合地点、饭堂/快递和路线工具。"
             "创建、修改、删除、保存、取消只规划预览，不得把 confirmed 设为 true。"
             f"允许工具：{allowed}"
@@ -87,7 +88,7 @@ class Planner:
                 response_format={"type": "json_object"},
             )
             plan = AgentPlan.model_validate(json.loads(raw))
-            valid_steps = [step for step in plan.steps if step.tool in TOOL_NAMES][:4]
+            valid_steps = [step for step in plan.steps if step.tool in TOOL_NAMES][:6]
             if len(valid_steps) != len(plan.steps):
                 raise ValueError("plan contains unknown tools")
             if required := STRICT_INTENT_TOOLS.get(decision.intent):
@@ -109,7 +110,7 @@ class Planner:
                     by_tool.setdefault("search_express_locations", AgentPlanStep(tool="search_express_locations", purpose="查找快递服务地点", arguments={}))
                 by_tool.setdefault("calculate_walking_route", AgentPlanStep(tool="calculate_walking_route", purpose="使用核验坐标或校内路径图计算路线", arguments={}))
                 order = ["search_campus_locations", "list_canteens", "search_express_locations", "calculate_walking_route"]
-                valid_steps = [by_tool[name] for name in order if name in by_tool][:4]
+                valid_steps = [by_tool[name] for name in order if name in by_tool][:6]
             # A model may repeat the same read tool in multiple plan steps. The
             # duplicate adds no evidence and produces duplicate cards/calls.
             unique_steps: dict[str, AgentPlanStep] = {}
@@ -134,8 +135,8 @@ class Planner:
         missing = [name for name in previous.required_tools if name not in {result.tool_name for result in results}]
         if not failed and not missing:
             return None
-        fallback = self._fallback(decision, message, min(previous.agent_round + 1, 4))
+        fallback = self._fallback(decision, message, min(previous.agent_round + 1, 6))
         attempted = {result.tool_name for result in results}
-        fallback.steps = [step for step in fallback.steps if step.tool not in attempted][:4]
+        fallback.steps = [step for step in fallback.steps if step.tool not in attempted][:6]
         fallback.required_tools = [step.tool for step in fallback.steps]
         return fallback if fallback.steps else None

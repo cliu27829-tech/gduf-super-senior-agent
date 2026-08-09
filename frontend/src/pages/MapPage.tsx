@@ -53,6 +53,8 @@ export default function MapPage() {
         setSelected(destination);
         setDestinationId(destination?.id || "");
       }
+      const requestedOrigin = searchParams.get("origin");
+      if (requestedOrigin) setOriginId(rows.some((item) => item.id === requestedOrigin) ? requestedOrigin : "");
     }).catch((reason) => { setLocations([]); setError(reason instanceof Error ? reason.message : "地点加载失败"); }).finally(() => setLoading(false));
   }, [campusId, searchParams]);
 
@@ -107,9 +109,8 @@ export default function MapPage() {
   const calculateCurrentRoute = async (position: BrowserLocation, destinationLocationId: string) => {
     const accuracy = locationAccuracy(position.accuracy);
     if (accuracy.status === "low") {
-      setRouteError(accuracy.message);
-      setLocationSheetOpen(true);
-      return;
+      const continueWithApproximate = window.confirm(`${accuracy.message}\n\n仍要使用这个近似位置继续规划吗？`);
+      if (!continueWithApproximate) { setRouteError(accuracy.message); setLocationSheetOpen(true); return; }
     }
     const destination = locations.find((item) => item.id === destinationLocationId);
     if (!destination || destination.longitude == null || destination.latitude == null || destination.coordinate_accuracy !== "exact" || !destination.coordinate_verified_at) {
@@ -155,11 +156,6 @@ export default function MapPage() {
   const allowCurrentPosition = async () => {
     try {
       const position = await geolocation.locate();
-      const accuracy = locationAccuracy(position.accuracy);
-      if (accuracy.status === "low") {
-        setRouteError(accuracy.message);
-        return;
-      }
       setLocationSheetOpen(false);
       if (destinationId || selected?.id) await calculateCurrentRoute(position, destinationId || selected!.id);
     } catch (reason) {
@@ -179,6 +175,26 @@ export default function MapPage() {
     if (geolocation.location) void calculateCurrentRoute(geolocation.location, requestedDestination);
     else setLocationSheetOpen(true);
   }, [locations, searchParams]);
+  useEffect(() => {
+    const origin = locations.find((item) => item.id === searchParams.get("origin"));
+    const destination = locations.find((item) => item.id === searchParams.get("destination"));
+    const waypoints = (searchParams.get("waypoints") || "").split(",").filter(Boolean)
+      .map((id) => locations.find((item) => item.id === id));
+    const ordered = [origin, ...waypoints, destination];
+    if (!realMapEnabled || !origin || !destination || waypoints.some((item) => !item)) return;
+    if (ordered.some((item) => !item || item.longitude == null || item.latitude == null || item.coordinate_accuracy !== "exact" || !item.coordinate_verified_at)) {
+      setRouteError("多目标路线包含未核验坐标，不能生成猜测路线。");
+      return;
+    }
+    setRouteBusy(true);
+    setRouteError("");
+    setRouteRequest({
+      id: Date.now(),
+      origin: [origin.longitude!, origin.latitude!],
+      destination: [destination.longitude!, destination.latitude!],
+      waypoints: waypoints.map((item) => [item!.longitude!, item!.latitude!] as [number, number]),
+    });
+  }, [locations, mapStatus, searchParams]);
   const calculateAddressRoute = () => {
     if (!originAddress.trim() || !destinationAddress.trim()) {
       setRouteError("请填写完整的起点和终点地址");
@@ -195,6 +211,13 @@ export default function MapPage() {
     setRoute(result);
     setRouteRequest(null);
     setRouteBusy(false);
+    const agentRunId = searchParams.get("agent_run_id");
+    if (agentRunId) {
+      void api(`/agent/runs/${encodeURIComponent(agentRunId)}/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ action_id: "client-route-completed" }),
+      }).catch(() => undefined);
+    }
   };
   const jsRouteFailed = (detail: string) => {
     setRouteError(detail);
@@ -216,7 +239,7 @@ export default function MapPage() {
         <aside className="location-list"><div className="panel-heading"><h2>地点列表</h2><span>{filtered.length} 条</span></div>{filtered.length ? filtered.map((item) => <button className={selected?.id === item.id ? "location-row active" : "location-row"} key={item.id} onClick={() => setSelected(item)}><span className={`category-icon category-${item.category}`}>{item.category === "canteen" ? "食" : "⌖"}</span><div><strong>{item.name}</strong><small>{item.area || item.address || "位置待核验"}</small></div><StatusBadge value={item.verification_status} /></button>) : <EmptyState title="没有匹配地点" detail="换个关键词或切换分类试试。" />}</aside>
       </div>}
       {selected && <div className="drawer-backdrop" onClick={() => setSelected(null)}><aside className="detail-drawer map-bottom-sheet" onClick={(e) => e.stopPropagation()} aria-label="地点详情"><button className="drawer-close" onClick={() => setSelected(null)} aria-label="关闭">×</button><p className="eyebrow">地点详情</p><h2>{selected.name}</h2><div className="badge-row"><StatusBadge value={selected.verification_status} /><StatusBadge value={selected.freshness_status} /><span className={`status-badge status-${selected.data_status}`}>{selected.data_status === "historical" ? "历史资料" : selected.verification_status === "verified" ? "已核验" : "待核验"}</span></div>{selected.data_status === "historical" && <p className="date-warning">这是历史资料，位置或服务可能已经变化，请通过来源或校方电话再次确认。</p>}<dl><dt>区域</dt><dd>{selected.area || "待核验"}</dd><dt>详细位置</dt><dd>{[selected.address, selected.floor].filter(Boolean).join(" · ") || "待核验"}</dd><dt>位置状态</dt><dd>{selected.coordinate_accuracy === "exact" ? "精确点位" : selected.coordinate_accuracy === "approximate" ? "区域近似点" : "无可信坐标"}</dd><dt>信息来源</dt><dd>{selected.coordinate_source === "amap_verified" ? "高德地图核验" : selected.coordinate_source || "待补充"}</dd><dt>别名</dt><dd>{selected.aliases.join("、") || "无"}</dd><dt>开放时间</dt><dd>{selected.opening_hours || "待核验"}</dd><dt>可办服务</dt><dd>{selected.services.join("、") || "待核验"}</dd><dt>资料核验</dt><dd>{formatDate(selected.verified_at)}</dd><dt>位置确认</dt><dd>{formatDate(selected.coordinate_verified_at)}</dd></dl><p>{selected.description || "暂无说明"}</p><div className="location-actions"><button className="button full" disabled={!canNavigateSelected} onClick={() => requestCurrentPosition(selected.id)}>⌖ 从我这里去</button>{canNavigateSelected ? <a className="ghost-button full" href={navigationUrl} target="_blank" rel="noreferrer">在高德打开</a> : <a className="ghost-button full" href={navigationUrl} target="_blank" rel="noreferrer">仅搜索地点（点位待核验）</a>}</div><div className="source-list"><h3>数据来源</h3>{selected.sources.length ? selected.sources.map((source) => source.url ? <a href={source.url} target="_blank" rel="noreferrer" key={source.id}><strong>{source.title}</strong><small>{source.publisher || "来源待补充"} · {source.is_official ? "校方来源" : "地图数据来源"}</small></a> : <div key={source.id}><strong>{source.title}</strong><small>{source.publisher || "来源待补充"}</small></div>) : <p>暂无可公开来源，条目仍待核验。</p>}</div><form className="feedback-form" onSubmit={submitFeedback}><h3>发现信息不准确？</h3><textarea minLength={5} required value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="说明哪里不准确，最好附上可核验线索" /><button className="ghost-button" type="submit">提交纠错</button>{message && <small role="status">{message}</small>}</form></aside></div>}
-      <LocationPermissionSheet open={locationSheetOpen} destinationName={selected?.name} locating={geolocation.locating || routeBusy} onAllow={() => void allowCurrentPosition()} onManual={chooseManualOrigin} onClose={() => setLocationSheetOpen(false)} />
+      <LocationPermissionSheet open={locationSheetOpen} destinationName={selected?.name} locating={geolocation.locating} onAllow={() => void allowCurrentPosition()} onManual={chooseManualOrigin} onClose={() => setLocationSheetOpen(false)} />
     </section>
   );
 }

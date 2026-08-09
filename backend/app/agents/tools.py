@@ -239,7 +239,58 @@ class AgentToolbox:
         data = [{"category": category, "sub_category": sub_category} for category, sub_category in rows]
         return self._ok("list_location_categories", data, f"当前校区有 {len(data)} 组地点分类")
 
-    async def calculate_walking_route(self, origin_location_id: str = "", destination_location_id: str = "", **_: Any) -> ToolResponse:
+    async def calculate_walking_route(
+        self,
+        origin_location_id: str = "",
+        destination_location_id: str = "",
+        waypoint_location_ids: list[str] | None = None,
+        **_: Any,
+    ) -> ToolResponse:
+        waypoint_location_ids = list(dict.fromkeys(waypoint_location_ids or []))[:4]
+        if waypoint_location_ids:
+            ordered_ids = [origin_location_id, *waypoint_location_ids, destination_location_id]
+            if len(set(ordered_ids)) != len(ordered_ids):
+                return ToolResponse(
+                    tool_name="calculate_walking_route", success=False,
+                    error="duplicate_route_stop", summary="多目标路线包含重复地点，请重新选择。",
+                )
+            segments: list[dict[str, Any]] = []
+            total_distance = 0
+            total_duration = 0
+            all_steps: list[Any] = []
+            polyline: list[Any] = []
+            for start_id, end_id in zip(ordered_ids, ordered_ids[1:]):
+                segment = await self.calculate_walking_route(start_id, end_id)
+                if not segment.success or not isinstance(segment.data, dict):
+                    return ToolResponse(
+                        tool_name="calculate_walking_route", success=False,
+                        error=segment.error or "segment_failed",
+                        summary=f"多目标路线在 {start_id} → {end_id} 段未完成：{segment.summary}",
+                        requires_user_action=segment.requires_user_action,
+                    )
+                row = segment.data
+                segments.append({"origin_location_id": start_id, "destination_location_id": end_id, **row})
+                total_distance += int(row.get("distance_meters") or 0)
+                total_duration += int(row.get("duration_seconds") or 0)
+                all_steps.extend(row.get("steps") or [])
+                points = row.get("polyline") or []
+                polyline.extend(points[1:] if polyline and points else points)
+            return self._ok(
+                "calculate_walking_route",
+                {
+                    "provider": "multi_segment_verified_route",
+                    "origin_location_id": origin_location_id,
+                    "waypoint_location_ids": waypoint_location_ids,
+                    "destination_location_id": destination_location_id,
+                    "distance_meters": total_distance,
+                    "duration_seconds": total_duration,
+                    "steps": all_steps,
+                    "polyline": polyline,
+                    "segments": segments,
+                },
+                f"已按顺序完成 {len(segments)} 段真实步行路线",
+                verification={"segments_verified": len(segments), "multi_stop": True},
+            )
         origin = self.db.get(Location, origin_location_id)
         destination = self.db.get(Location, destination_location_id)
         if not origin or not destination or origin.campus_id != self.campus_id or destination.campus_id != self.campus_id:

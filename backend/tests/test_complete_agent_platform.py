@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -186,4 +187,7 @@ def test_agent_core_intents_expose_plan_and_tool_outcomes(client: TestClient, re
         assert body["intent"] == intent
         assert body["plan"] == plan
         assert body["tools_called"] == tools
-        assert all(body["tool_success"].get(tool) is True for tool in tools)
+        assert all(body["tool_success"].get(tool) is True for tool in tools), json.dumps(
+            {"message": message, "tool_success": body["tool_success"], "tool_results": body["tool_results"]},
+            ensure_ascii=False,
+        )

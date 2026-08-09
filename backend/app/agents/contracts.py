@@ -16,20 +16,24 @@ class IntentDecision(BaseModel):
 class AgentPlanStep(BaseModel):
     tool: str
     purpose: str
+    reason: str = ""
     arguments: dict[str, Any] = Field(default_factory=dict)
+    required_input: list[str] = Field(default_factory=list)
+    requires_user_action: bool = False
 
 
 class AgentPlan(BaseModel):
     intent: str
     goal: str
-    steps: list[AgentPlanStep] = Field(default_factory=list, max_length=4)
-    required_tools: list[str] = Field(default_factory=list, max_length=4)
+    steps: list[AgentPlanStep] = Field(default_factory=list, max_length=6)
+    required_tools: list[str] = Field(default_factory=list, max_length=6)
     requires_knowledge: bool = False
     requires_confirmation: bool = False
     missing_information: list[str] = Field(default_factory=list)
     risk_level: str = "low"
     risks: list[str] = Field(default_factory=list)
-    agent_round: int = Field(default=1, ge=1, le=4)
+    agent_round: int = Field(default=1, ge=1, le=6)
+    completion_condition: str = "向用户返回经过核验的结果"
 
 
 class Observation(BaseModel):

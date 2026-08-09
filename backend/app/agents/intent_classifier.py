@@ -32,6 +32,9 @@ DEFAULT_TOOL_PLANS = {
     "note_management": ["preview_note"],
     "daily_summary": ["get_daily_summary"],
 }
+CONVERSATION_RECALL_TERMS = (
+    "刚才说", "之前说", "前面说", "我叫什么", "还记得我", "你记得我", "这段对话",
+)
 
 
 class IntentClassifier:
@@ -63,11 +66,14 @@ class IntentClassifier:
         return IntentDecision(intent="general_chat", confidence=0.6, query=message, tool_plan=[])
 
     async def classify(self, message: str) -> IntentDecision:
+        if any(term in message for term in CONVERSATION_RECALL_TERMS):
+            return IntentDecision(intent="general_chat", confidence=0.95, query=message, tool_plan=[])
         prompt = (
             "你是校园 Agent 的意图规划器，只输出 json 对象：intent/confidence/query/tool_plan。"
             f"intent 必须属于：{sorted(INTENTS)}。"
             "地点、路线、附近、饭堂、餐品、校内制度、办事流程和资料纠错属于校园事实，必须选择对应数据库或地图工具；"
-            "查询用户资料或校园知识使用 knowledge_search；上传文件、粘贴正文或导入文章链接使用 knowledge_import。"
+            "查询已导入的用户资料或校园知识使用 knowledge_search；回忆当前对话中用户刚才说过的话使用 general_chat。"
+            "上传文件、粘贴正文或导入文章链接使用 knowledge_import。"
             "学院数量、校区基本情况和别名使用 campus_fact_search；提醒使用 reminder_management；便签使用 note_management；"
             "‘我今天/明天/近期还有什么’使用 daily_summary。学习建议、校园生活建议和寒暄可以不调用校园事实工具。"
             "创建、修改、删除、批量保存等副作用不得直接执行。"

@@ -9,9 +9,11 @@ import type { NotificationParseResult } from "../types";
 type ToolResult = { tool: string; status: string; title: string; data: unknown };
 type Source = { title?: string; url?: string; publisher?: string; published_at?: string | null; verified_at?: string | null; source_type?: string };
 type MapAction = { type: string; url?: string; location_id?: string; destination_location_id?: string; campus_id?: string; reason?: string };
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string; intent?: string; tool_results?: ToolResult[]; sources?: Source[]; map_action?: MapAction | null; degraded?: boolean; error_id?: string | null; data_status?: string };
+type AgentStep = { id?: string; sequence?: number; tool_name?: string; public_label: string; status: string; success?: boolean | null; output_summary?: string };
+type AgentAction = { id: string; type: string; label: string; style?: string; url?: string | null; api_path?: string | null; method?: string; payload?: Record<string, unknown>; requires_confirmation?: boolean };
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; intent?: string; tool_results?: ToolResult[]; sources?: Source[]; map_action?: MapAction | null; degraded?: boolean; error_id?: string | null; data_status?: string; agent_run_id?: string | null; agent_status?: string | null; agent_steps?: AgentStep[]; actions?: AgentAction[] };
 type Conversation = { id: string; title: string; updated_at: string };
-type ChatResponse = { conversation_id: string; message_id: string; intent: string; answer: string; tool_results: ToolResult[]; sources: Source[]; locations: Record<string, unknown>[]; route: Record<string, unknown> | null; map_action: MapAction | null; degraded: boolean; error_id: string | null; data_status: string };
+type ChatResponse = { conversation_id: string; message_id: string; intent: string; answer: string; tool_results: ToolResult[]; sources: Source[]; locations: Record<string, unknown>[]; route: Record<string, unknown> | null; map_action: MapAction | null; degraded: boolean; error_id: string | null; data_status: string; agent_run_id: string | null; agent_status: string | null; agent_steps: AgentStep[]; actions: AgentAction[] };
 type AgentStatus = { backend: string; llm_configured: boolean; model: string; database: string };
 
 const QUICK_ACTIONS = [
@@ -34,15 +36,16 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([welcome()]);
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [chatBusy, setChatBusy] = useState(false);
   const [error, setError] = useState("");
   const [failedMessage, setFailedMessage] = useState("");
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [stage, setStage] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
-  const [pendingNavigation, setPendingNavigation] = useState<{ destinationId: string; destinationName: string; message: string } | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<{ destinationId: string; destinationName: string; message: string; agentRunId: string | null } | null>(null);
   const [locationSheetOpen, setLocationSheetOpen] = useState(false);
+  const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -96,18 +99,18 @@ export default function ChatPage() {
     }]);
   };
 
-  const send = async (content: string, appendUser = true, locationContext?: BrowserLocation, resumeNavigation = false) => {
-    if ((!content.trim() && !attachment) || busy) return;
+  const send = async (content: string, appendUser = true, locationContext?: BrowserLocation, resumeNavigation = false, agentRunId: string | null = null) => {
+    if ((!content.trim() && !attachment) || chatBusy) return;
     if (!agentStatus?.llm_configured && !attachment) { setError("后端已连接，但尚未配置大模型密钥。"); return; }
     const file = attachment;
-    setError(""); setFailedMessage(""); setBusy(true); setStage(file ? "正在提取附件内容" : "正在连接大师兄");
+    setError(""); setFailedMessage(""); setChatBusy(true); setStage(file ? "正在提取附件内容" : "正在连接大师兄"); setLiveSteps([]);
     const localUserId = `local-${Date.now()}`;
     if (appendUser) setMessages((current) => [...current, { id: localUserId, role: "user", content: content || `附件：${file?.name}` }]);
     setAttachment(null);
     if (file) {
       try { await sendAttachment(file, content); }
       catch (reason) { setError(reason instanceof Error ? reason.message : "附件解析失败"); setFailedMessage(content); }
-      finally { setBusy(false); setStage(""); }
+      finally { setChatBusy(false); setStage(""); }
       return;
     }
 
@@ -122,9 +125,35 @@ export default function ChatPage() {
           campus_id: user?.campus_id,
           location_context: locationContext,
           resume_navigation: resumeNavigation,
+          agent_run_id: agentRunId,
         },
         ({ event, data }) => {
           if (event === "stage") setStage(String(data.label || "正在处理"));
+          if (event === "plan" && Array.isArray(data.steps)) {
+            setLiveSteps((data.steps as Record<string, unknown>[]).map((step, index) => ({
+              id: `planned-${index}-${String(step.tool || "step")}`,
+              tool_name: String(step.tool || ""), public_label: String(step.label || "执行计划"), status: "planned",
+            })));
+          }
+          if (event === "tool_start") {
+            const id = String(data.step_id || data.tool || Date.now());
+            setLiveSteps((current) => {
+              const next = { id, tool_name: String(data.tool || ""), public_label: String(data.label || "正在执行"), status: "running" };
+              const matched = current.findIndex((step) => step.tool_name === next.tool_name && step.status === "planned");
+              if (matched < 0) return [...current, next];
+              return current.map((step, index) => index === matched ? next : step);
+            });
+          }
+          if (event === "tool_end") {
+            const id = String(data.step_id || "");
+            setLiveSteps((current) => current.map((step) => step.id === id || (!id && step.tool_name === String(data.tool || "")) ? {
+              ...step, status: data.success ? "completed" : "failed", success: Boolean(data.success), output_summary: String(data.summary || ""),
+            } : step));
+          }
+          if (event === "verify") setLiveSteps((current) => [...current, {
+            id: String(data.step_id || `verify-${Date.now()}`), public_label: "核对来源、校区和结果完整性",
+            status: data.success ? "completed" : "failed", success: Boolean(data.success),
+          }]);
           if (event === "token") setMessages((current) => current.map((item) => item.id === streamingId ? { ...item, content: item.content + String(data.content || "") } : item));
           if (event === "final") {
             const result = data as unknown as ChatResponse;
@@ -134,6 +163,7 @@ export default function ChatPage() {
                 destinationId: result.map_action.destination_location_id,
                 destinationName: String(result.locations?.[0]?.name || "目的地"),
                 message: content,
+                agentRunId: result.agent_run_id,
               });
               setLocationSheetOpen(true);
             } else if (resumeNavigation) {
@@ -144,6 +174,8 @@ export default function ChatPage() {
               id: result.message_id, role: "assistant", content: result.answer, intent: result.intent,
               tool_results: result.tool_results, sources: result.sources, map_action: result.map_action,
               degraded: result.degraded, error_id: result.error_id, data_status: result.data_status,
+              agent_run_id: result.agent_run_id, agent_status: result.agent_status,
+              agent_steps: result.agent_steps, actions: result.actions,
             } : item));
           }
         },
@@ -157,7 +189,7 @@ export default function ChatPage() {
         setMessages((current) => current.filter((item) => item.id !== streamingId || Boolean(item.content)));
         setError(reason instanceof Error ? reason.message : "消息发送失败"); setFailedMessage(content);
       }
-    } finally { abortRef.current = null; setBusy(false); setStage(""); }
+    } finally { abortRef.current = null; setChatBusy(false); setStage(""); }
   };
 
   const allowLocation = async () => {
@@ -166,11 +198,11 @@ export default function ChatPage() {
       const position = await geolocation.locate();
       const accuracy = locationAccuracy(position.accuracy);
       if (accuracy.status === "low") {
-        setError(accuracy.message);
-        return;
+        const continueWithApproximate = window.confirm(`${accuracy.message}\n\n仍要使用这个近似位置继续规划吗？选择“取消”可重新定位或手动选择起点。`);
+        if (!continueWithApproximate) { setError(accuracy.message); return; }
       }
       setLocationSheetOpen(false);
-      await send(pendingNavigation.message, false, position, true);
+      await send(pendingNavigation.message, false, position, true, pendingNavigation.agentRunId);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "定位失败，请选择其他起点");
     }
@@ -218,11 +250,14 @@ export default function ChatPage() {
         <div className="message-list" aria-live="polite">
           {messages.map((message) => <MessageView key={message.id} message={message} userInitial={(user?.nickname || "我").slice(0, 1)} onRequestLocation={() => {
             if (message.map_action?.destination_location_id) {
-              setPendingNavigation({ destinationId: message.map_action.destination_location_id, destinationName: "目的地", message: [...messages].reverse().find((item) => item.role === "user")?.content || "怎么走？" });
+              setPendingNavigation({ destinationId: message.map_action.destination_location_id, destinationName: "目的地", message: [...messages].reverse().find((item) => item.role === "user")?.content || "怎么走？", agentRunId: message.agent_run_id || null });
             }
             setLocationSheetOpen(true);
           }} />)}
-          {busy && stage && <div className="agent-progress" role="status"><span /><span /><span />{stage}</div>}
+          {chatBusy && (stage || liveSteps.length > 0) && <div className="agent-run-live" role="status">
+            <div className="agent-progress"><span /><span /><span />{stage || "正在执行"}</div>
+            {liveSteps.length > 0 && <AgentTrace steps={liveSteps} compact />}
+          </div>}
           <div ref={endRef} />
         </div>
 
@@ -234,15 +269,15 @@ export default function ChatPage() {
             <button type="button" className="composer-icon" title="添加 TXT 或 PDF" aria-label="添加附件" onClick={() => fileRef.current?.click()}>＋</button>
             <input ref={fileRef} hidden type="file" accept=".txt,.pdf,text/plain,application/pdf" onChange={(event) => chooseFile(event.target.files?.[0])} />
             <textarea ref={textareaRef} aria-label="消息" rows={1} value={input} onChange={(event) => setInput(event.target.value)} placeholder="发消息，或粘贴一份通知…" onKeyDown={handleKey} />
-            {busy ? <button type="button" className="stop-button" onClick={() => abortRef.current?.abort()}>停止</button> : <button className="send-button" aria-label="发送" disabled={(!input.trim() && !attachment) || (!agentStatus?.llm_configured && !attachment)}>↑</button>}
+            {chatBusy ? <button type="button" className="stop-button" onClick={() => abortRef.current?.abort()}>停止</button> : <button className="send-button" aria-label="发送" disabled={(!input.trim() && !attachment) || (!agentStatus?.llm_configured && !attachment)}>↑</button>}
           </div>
-          <div className="composer-meta"><span>Enter 发送 · Shift+Enter 换行 · 可拖入 TXT/PDF</span>{lastUserMessage && !busy && <button type="button" onClick={() => void send(lastUserMessage.content, false)}>重新生成</button>}</div>
+          <div className="composer-meta"><span>Enter 发送 · Shift+Enter 换行 · 可拖入 TXT/PDF</span>{lastUserMessage && !chatBusy && <button type="button" onClick={() => void send(lastUserMessage.content, false)}>重新生成</button>}</div>
         </form>
       </div>
       <LocationPermissionSheet
         open={locationSheetOpen}
         destinationName={pendingNavigation?.destinationName}
-        locating={geolocation.locating || busy}
+        locating={geolocation.locating}
         onAllow={() => void allowLocation()}
         onManual={chooseManualOrigin}
         onClose={() => setLocationSheetOpen(false)}
@@ -254,7 +289,52 @@ export default function ChatPage() {
 function MessageView({ message, userInitial, onRequestLocation }: { message: ChatMessage; userInitial: string; onRequestLocation: () => void }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => { await navigator.clipboard?.writeText(message.content); setCopied(true); window.setTimeout(() => setCopied(false), 1200); };
-  return <article className={`message ${message.role}`}><div className="message-avatar">{message.role === "assistant" ? "广" : userInitial}</div><div className="message-column"><div className="message-body">{message.content ? <MarkdownMessage content={message.content} /> : <span className="typing-cursor" />}{message.data_status === "needs_verification" && <div className="data-caution">部分校园资料仍待核验，回答中已保留状态说明。</div>}{message.tool_results?.map((tool, index) => <ToolCard tool={tool} key={`${message.id}-${index}`} />)}{message.map_action?.type === "request_location" && <button className="inline-action" onClick={onRequestLocation}>⌖ 使用当前位置规划</button>}{message.map_action?.url && message.map_action.type !== "request_location" && <Link className="inline-action" to={message.map_action.url}>{["route", "client_route"].includes(message.map_action.type) ? "在地图中查看路线" : "在地图中查看"}</Link>}{message.sources && message.sources.length > 0 && <details className="execution-details"><summary>查看来源</summary>{message.sources.map((source, index) => <a href={source.url || undefined} target="_blank" rel="noreferrer" key={`${source.url}-${index}`}>{source.title || "来源"}{source.published_at ? ` · ${new Date(source.published_at).toLocaleDateString("zh-CN")}` : ""}</a>)}</details>}</div>{message.content && <button className="message-copy" onClick={() => void copy()}>{copied ? "已复制" : "复制"}</button>}</div></article>;
+  return <article className={`message ${message.role}`}>
+    <div className="message-avatar">{message.role === "assistant" ? "广" : userInitial}</div>
+    <div className="message-column">
+      <div className="message-body">
+        {message.content ? <MarkdownMessage content={message.content} /> : <span className="typing-cursor" />}
+        {message.data_status === "needs_verification" && <div className="data-caution">部分校园资料仍待核验，回答中已保留状态说明。</div>}
+        {message.agent_steps && message.agent_steps.length > 0 && <AgentTrace steps={message.agent_steps} status={message.agent_status || undefined} />}
+        {message.tool_results?.map((tool, index) => <ToolCard tool={tool} key={`${message.id}-${index}`} />)}
+        {message.actions && message.actions.length > 0 && <div className="action-card-row">{message.actions.map((action) => <ActionCard key={action.id} action={action} runId={message.agent_run_id || null} onRequestLocation={onRequestLocation} />)}</div>}
+        {!message.actions?.length && message.map_action?.type === "request_location" && <button className="inline-action" onClick={onRequestLocation}>⌖ 使用当前位置规划</button>}
+        {!message.actions?.length && message.map_action?.url && message.map_action.type !== "request_location" && <Link className="inline-action" to={message.map_action.url}>{["route", "client_route"].includes(message.map_action.type) ? "在地图中查看路线" : "在地图中查看"}</Link>}
+        {message.sources && message.sources.length > 0 && <details className="execution-details"><summary>查看来源</summary>{message.sources.map((source, index) => <a href={source.url || undefined} target="_blank" rel="noreferrer" key={`${source.url}-${index}`}>{source.title || "来源"}{source.published_at ? ` · ${new Date(source.published_at).toLocaleDateString("zh-CN")}` : ""}</a>)}</details>}
+      </div>
+      {message.content && <button className="message-copy" onClick={() => void copy()}>{copied ? "已复制" : "复制"}</button>}
+    </div>
+  </article>;
+}
+
+function AgentTrace({ steps, status, compact = false }: { steps: AgentStep[]; status?: string; compact?: boolean }) {
+  const visible = steps.filter((step, index) => index === steps.findIndex((candidate) => candidate.id === step.id));
+  return <div className={`agent-trace ${compact ? "compact" : ""}`}>
+    {!compact && <div className="agent-trace-heading"><strong>大师兄执行过程</strong>{status && <span>{status === "completed" ? "已完成" : status === "failed" ? "未完成" : status === "waiting_for_location" ? "等待定位" : status === "waiting_for_confirmation" ? "等待确认" : "处理中"}</span>}</div>}
+    <ol>{visible.map((step) => <li className={step.status} key={step.id || `${step.tool_name}-${step.public_label}`}>
+      <span aria-hidden="true">{step.status === "completed" ? "✓" : step.status === "failed" ? "!" : step.status === "running" ? "●" : "○"}</span>
+      <div><strong>{step.public_label}</strong>{step.output_summary && !compact && <small>{step.output_summary}</small>}</div>
+    </li>)}</ol>
+  </div>;
+}
+
+function ActionCard({ action, runId, onRequestLocation }: { action: AgentAction; runId: string | null; onRequestLocation: () => void }) {
+  const [working, setWorking] = useState(false);
+  const [status, setStatus] = useState("");
+  if (action.url) return <Link className="agent-action-card" to={action.url}><span>{action.type === "navigation" ? "↗" : "→"}</span><strong>{action.label}</strong></Link>;
+  const execute = async () => {
+    if (action.type === "location") { onRequestLocation(); return; }
+    if (!action.api_path) return;
+    if (action.requires_confirmation && !window.confirm(`确认执行“${action.label}”？`)) return;
+    setWorking(true); setStatus("");
+    try {
+      await api(action.api_path, { method: action.method || "POST", body: JSON.stringify(action.payload || {}) });
+      if (runId && action.requires_confirmation) await api(`/agent/runs/${runId}/confirm`, { method: "POST", body: JSON.stringify({ action_id: action.id }) });
+      setStatus("已完成");
+    } catch (reason) { setStatus(reason instanceof Error ? reason.message : "执行失败"); }
+    finally { setWorking(false); }
+  };
+  return <div className="agent-action-card"><button disabled={working} onClick={() => void execute()}><span>{action.type === "reminder" ? "◷" : action.type === "note" ? "▤" : action.type === "location" ? "⌖" : "✓"}</span><strong>{working ? "正在执行…" : action.label}</strong></button>{status && <small role="status">{status}</small>}</div>;
 }
 
 function ToolCard({ tool }: { tool: ToolResult }) {

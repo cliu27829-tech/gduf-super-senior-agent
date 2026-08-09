@@ -26,13 +26,17 @@ test("chat requests consent, resumes with current position and opens the real ma
     await expect(sheet).toBeVisible({ timeout: 90_000 });
     await expect(sheet).toContainText("不会保存你的实时位置");
     await sheet.getByRole("button", { name: "使用我的位置" }).click();
-    await expect(page.getByText(/后端尚未配置高德 WebService Key|路线已经算好/)).toBeVisible({ timeout: 90_000 });
-    const mapLink = page.getByRole("link", { name: "在地图中查看路线" }).last();
+    await expect(page.getByText(/后端尚未配置高德 WebService Key|路线已经算好/).first()).toBeVisible({ timeout: 90_000 });
+    const mapLink = page.getByRole("link", { name: /开始导航|在地图中查看路线/ }).last();
     await expect(mapLink).toBeVisible();
     await mapLink.click();
     await expect(page.getByText("定位较准确")).toBeVisible();
     await expect(page.getByText(/km · 约/)).toBeVisible({ timeout: 60_000 });
     await expect(page.locator(".amap-marker").first()).toBeVisible();
+    await expect.poll(async () => page.evaluate(async () => {
+      const runs = await (await fetch("/api/agent/runs", { credentials: "include" })).json();
+      return runs.find((run: { goal: string }) => run.goal.includes("图书馆怎么走"))?.status;
+    })).toBe("completed");
   } finally {
     await request.post("http://127.0.0.1:8000/api/auth/login", { data: { email, password } });
     await request.delete("http://127.0.0.1:8000/api/auth/account");

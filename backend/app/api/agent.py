@@ -11,7 +11,8 @@ from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import CurrentUser, DbSession
 from app.core.llm_client import LLMClient, LLMClientError, get_llm_client
-from app.models.entities import Campus, Conversation, Message
+from app.agents.run_store import AgentRunStore, public_run
+from app.models.entities import AgentRun, Campus, Conversation, Message
 from app.schemas.agent import AgentChatRequest, AgentChatResponse, AgentStatusResponse
 from app.services.agent_service import AgentService
 from app.services.ownership import get_owned_conversation
@@ -58,6 +59,7 @@ async def chat(payload: AgentChatRequest, user: CurrentUser, db: DbSession, llm:
             campus_id,
             location_context=payload.location_context,
             resume_navigation=payload.resume_navigation,
+            agent_run_id=payload.agent_run_id,
         )
     except LLMClientError as exc:
         db.rollback()
@@ -107,6 +109,7 @@ async def chat_stream(
                     emit,
                     location_context=payload.location_context,
                     resume_navigation=payload.resume_navigation,
+                    agent_run_id=payload.agent_run_id,
                 )
             except LLMClientError as exc:
                 db.rollback()
@@ -138,6 +141,73 @@ async def chat_stream(
 def conversations(user: CurrentUser, db: DbSession) -> list[dict]:
     rows = list(db.scalars(select(Conversation).where(Conversation.user_id == user.id).order_by(Conversation.updated_at.desc())))
     return [{"id": row.id, "title": row.title, "campus_id": row.campus_id, "created_at": row.created_at, "updated_at": row.updated_at} for row in rows]
+
+
+@router.get("/runs")
+def agent_runs(user: CurrentUser, db: DbSession, limit: int = 20) -> list[dict]:
+    rows = list(db.scalars(
+        select(AgentRun)
+        .where(AgentRun.user_id == user.id)
+        .order_by(AgentRun.updated_at.desc())
+        .limit(min(max(limit, 1), 100))
+    ))
+    return [public_run(row, include_steps=False) for row in rows]
+
+
+@router.get("/runs/{run_id}")
+def agent_run_detail(run_id: str, user: CurrentUser, db: DbSession) -> dict:
+    row = db.scalar(
+        select(AgentRun)
+        .options(selectinload(AgentRun.steps))
+        .where(AgentRun.id == run_id, AgentRun.user_id == user.id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Agent 执行不存在")
+    return public_run(row)
+
+
+@router.post("/runs/{run_id}/confirm")
+def confirm_agent_action(run_id: str, payload: dict, user: CurrentUser, db: DbSession) -> dict:
+    row = db.scalar(
+        select(AgentRun)
+        .options(selectinload(AgentRun.steps))
+        .where(AgentRun.id == run_id, AgentRun.user_id == user.id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Agent 执行不存在")
+    if row.status not in {"waiting_for_confirmation", "waiting_for_user_input"}:
+        raise HTTPException(status_code=409, detail="该 Agent 执行当前不等待用户动作")
+    action_id = str(payload.get("action_id") or "")[:100]
+    if not action_id:
+        raise HTTPException(status_code=422, detail="缺少 action_id")
+    required_input = row.required_input if isinstance(row.required_input, list) else []
+    if row.status == "waiting_for_confirmation":
+        allowed_actions = {
+            str(item.get("action_id"))
+            for item in required_input
+            if isinstance(item, dict) and item.get("action_id")
+        }
+        if action_id not in allowed_actions:
+            raise HTTPException(status_code=409, detail="该操作不在本次 Agent 执行的待确认列表中")
+    if row.status == "waiting_for_user_input":
+        waiting_for_client_route = any(
+            isinstance(item, dict) and item.get("type") == "client_navigation"
+            for item in required_input
+        )
+        if not waiting_for_client_route or action_id != "client-route-completed":
+            raise HTTPException(status_code=409, detail="该 Agent 执行尚未满足完成条件")
+    store = AgentRunStore(db)
+    step = store.start_step(
+        row,
+        step_type="user_action",
+        tool_name=action_id,
+        public_label="用户已确认并完成写入操作",
+    )
+    store.finish_step(step, True, action_id)
+    store.transition(row, "completed", required_input=[], summary="用户已确认，目标闭环完成。")
+    db.commit()
+    db.refresh(row, attribute_names=["steps"])
+    return public_run(row)
 
 
 @router.post("/conversations", status_code=status.HTTP_201_CREATED)

@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.security import hash_password
 from app.models.entities import (
-    Campus, CampusCollege, CampusFact, CampusProcess, Canteen, FoodStall, KnowledgeDocument, Location, Source, User,
+    Campus, CampusCollege, CampusFact, CampusPathEdge, CampusPathNode, CampusProcess, Canteen, FoodStall,
+    KnowledgeDocument, Location, Source, User,
 )
 
 
@@ -222,6 +223,60 @@ def seed_database(db: Session) -> None:
     if old_demo_stall:
         old_demo_stall.data_status = "demo_fixture"
         old_demo_stall.is_active = False
+
+    # Retire the former aggregate so searches do not return both "南区宿舍楼"
+    # and the official 1-5 building records. Existing foreign keys remain valid.
+    legacy_south_dorms = db.get(Location, "qy-south-dorms")
+    if legacy_south_dorms and legacy_south_dorms.data_status not in PROTECTED_STATUSES:
+        legacy_south_dorms.is_active = False
+    legacy_west_canteen = db.get(Canteen, "canteen-qy-west-food-street")
+    if legacy_west_canteen and legacy_west_canteen.data_status not in PROTECTED_STATUSES:
+        legacy_west_canteen.is_active = False
+    legacy_placeholder = db.get(Location, "qy-canteen-placeholder")
+    if legacy_placeholder and legacy_placeholder.data_status not in PROTECTED_STATUSES:
+        legacy_placeholder.is_active = False
+    legacy_placeholder_canteen = db.get(Canteen, "canteen-qy-canteen-placeholder")
+    if legacy_placeholder_canteen and legacy_placeholder_canteen.data_status not in PROTECTED_STATUSES:
+        legacy_placeholder_canteen.is_active = False
+
+    for slug, name, _ in CAMPUS_DEFINITIONS:
+        path = campus_root / slug / "paths.json"
+        if not path.exists():
+            continue
+        package = json.loads(path.read_text(encoding="utf-8"))
+        campus = campus_by_name[name]
+        for item in package.get("nodes", []):
+            node = db.get(CampusPathNode, item["id"])
+            if not node:
+                node = CampusPathNode(id=item["id"], campus_id=campus.id, name=item["name"])
+                db.add(node)
+            node.campus_id = campus.id
+            node.location_id = item.get("location_id")
+            node.name = item["name"]
+            node.latitude = item.get("latitude")
+            node.longitude = item.get("longitude")
+            node.map_x = item.get("map_x")
+            node.map_y = item.get("map_y")
+            node.verified = bool(item.get("verified", False))
+            node.source_url = item.get("source_url", "")
+        db.flush()
+        for item in package.get("edges", []):
+            edge = db.get(CampusPathEdge, item["id"])
+            if not edge:
+                edge = CampusPathEdge(
+                    id=item["id"], campus_id=campus.id,
+                    from_node_id=item["from_node_id"], to_node_id=item["to_node_id"],
+                )
+                db.add(edge)
+            edge.campus_id = campus.id
+            edge.from_node_id = item["from_node_id"]
+            edge.to_node_id = item["to_node_id"]
+            edge.distance_meters = item.get("distance_meters")
+            edge.instruction = item.get("instruction", "")
+            edge.bidirectional = bool(item.get("bidirectional", True))
+            edge.accessible = bool(item.get("accessible", True))
+            edge.verified = bool(item.get("verified", False))
+            edge.source_url = item.get("source_url", "")
 
     for slug, name, _ in CAMPUS_DEFINITIONS:
         path = campus_root / slug / "processes.json"

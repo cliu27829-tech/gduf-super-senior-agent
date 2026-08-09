@@ -45,6 +45,7 @@ export type MapRouteRequest = {
   id: number;
   origin?: [number, number];
   destination?: [number, number];
+  waypoints?: [number, number][];
   originAddress?: string;
   destinationAddress?: string;
 };
@@ -166,23 +167,35 @@ export function AmapCanvas({
     if (!AMap || !loaded || !routeRequest) return;
     AMap.plugin(["AMap.Walking", "AMap.Geocoder"], () => {
       const walking = new AMap.Walking();
-      const runWalking = (origin: [number, number], destination: [number, number]) => walking.search(origin, destination, (status, result) => {
-        const first = result.routes?.[0];
-        if (status !== "complete" || !first) {
-          onRouteError("高德 JS 步行路线规划失败，请稍后重试");
-          return;
-        }
-        const steps = (first.steps || []).map((step) => ({ instruction: step.instruction || "继续步行" }));
-        const polyline = (first.steps || []).flatMap((step) => (step.path || []).map((point) => [point.lng, point.lat]));
-        onRouteCalculated({
-          distance_meters: Number(first.distance || 0),
-          duration_seconds: Number(first.time || 0),
-          steps,
-          polyline,
+      const walkingSegment = (origin: [number, number], destination: [number, number]) => new Promise<MapRoute>((resolve, reject) => {
+        walking.search(origin, destination, (status, result) => {
+          const first = result.routes?.[0];
+          if (status !== "complete" || !first) { reject(new Error("walking_failed")); return; }
+          resolve({
+            distance_meters: Number(first.distance || 0),
+            duration_seconds: Number(first.time || 0),
+            steps: (first.steps || []).map((step) => ({ instruction: step.instruction || "继续步行" })),
+            polyline: (first.steps || []).flatMap((step) => (step.path || []).map((point) => [point.lng, point.lat])),
+          });
         });
       });
+      const runWalking = async (origin: [number, number], destination: [number, number], waypoints: [number, number][] = []) => {
+        try {
+          const points = [origin, ...waypoints, destination];
+          const segments: MapRoute[] = [];
+          for (let index = 0; index < points.length - 1; index += 1) {
+            segments.push(await walkingSegment(points[index], points[index + 1]));
+          }
+          onRouteCalculated({
+            distance_meters: segments.reduce((total, segment) => total + segment.distance_meters, 0),
+            duration_seconds: segments.reduce((total, segment) => total + segment.duration_seconds, 0),
+            steps: segments.flatMap((segment) => segment.steps),
+            polyline: segments.flatMap((segment, index) => index ? segment.polyline.slice(1) : segment.polyline),
+          });
+        } catch { onRouteError("高德 JS 步行路线规划失败，请稍后重试"); }
+      };
       if (routeRequest.origin && routeRequest.destination) {
-        runWalking(routeRequest.origin, routeRequest.destination);
+        void runWalking(routeRequest.origin, routeRequest.destination, routeRequest.waypoints);
         return;
       }
       if (!routeRequest.originAddress || !routeRequest.destinationAddress) {

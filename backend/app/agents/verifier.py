@@ -37,7 +37,7 @@ class Verifier:
             else "needs_verification" if tools else "not_applicable"
         )
         return VerificationReport(
-            valid=success and campus_ok,
+            valid=success and campus_ok and nonempty,
             checks={"tools_succeeded": success, "campus_isolated": campus_ok, "result_nonempty": nonempty},
             warnings=warnings,
             data_status=data_status,

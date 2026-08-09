@@ -14,6 +14,7 @@ class AgentChatRequest(BaseModel):
     campus: str | None = Field(default=None, max_length=64)
     location_context: LocationContext | None = None
     resume_navigation: bool = False
+    agent_run_id: str | None = None
 
     @field_validator("message")
     @classmethod
@@ -38,6 +39,32 @@ class ToolResult(BaseModel):
     data: dict | list | None = None
 
 
+class AgentAction(BaseModel):
+    id: str
+    type: str
+    label: str
+    style: str = "primary"
+    url: str | None = None
+    api_path: str | None = None
+    method: str = "GET"
+    payload: dict = Field(default_factory=dict)
+    requires_confirmation: bool = False
+
+
+class AgentStepPublic(BaseModel):
+    id: str
+    sequence: int
+    round_number: int = 1
+    step_type: str
+    tool_name: str = ""
+    public_label: str
+    status: str
+    success: bool | None = None
+    output_summary: str = ""
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
 class AgentChatResponse(BaseModel):
     conversation_id: str
     message_id: str
@@ -56,6 +83,10 @@ class AgentChatResponse(BaseModel):
     error_id: str | None = None
     data_status: str = "not_applicable"
     current_time: datetime
+    agent_run_id: str | None = None
+    agent_status: str | None = None
+    agent_steps: list[AgentStepPublic] = Field(default_factory=list)
+    actions: list[AgentAction] = Field(default_factory=list)
 
 
 class NotificationNotice(BaseModel):

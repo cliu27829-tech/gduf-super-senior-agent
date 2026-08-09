@@ -226,6 +226,7 @@ class AgentService:
                 stalls = [stall for stall in stalls if self._food_matches(message, stall)]
             item_data = {
                 "id": row.id,
+                "location_id": row.location_id,
                 "name": row.name,
                 "area": row.location.area if row.location else "",
                 "address": row.location.address if row.location else "",
@@ -403,12 +404,14 @@ class AgentService:
         campus_id: str | None,
         location_context=None,
         resume_navigation: bool = False,
+        agent_run_id: str | None = None,
     ) -> AgentChatResponse:
         from app.agents.orchestrator import AgentOrchestrator
 
         return await AgentOrchestrator(self.db, self.llm, self).run(
             user, message, conversation_id, campus_id, location_context=location_context,
             resume_navigation=resume_navigation,
+            agent_run_id=agent_run_id,
         )
 
     async def chat_stream(
@@ -420,10 +423,12 @@ class AgentService:
         on_event,
         location_context=None,
         resume_navigation: bool = False,
+        agent_run_id: str | None = None,
     ) -> AgentChatResponse:
         from app.agents.orchestrator import AgentOrchestrator
 
         return await AgentOrchestrator(self.db, self.llm, self).run(
             user, message, conversation_id, campus_id, on_event=on_event,
             location_context=location_context, resume_navigation=resume_navigation,
+            agent_run_id=agent_run_id,
         )

@@ -525,6 +525,59 @@ class ToolExecution(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
+class AgentRun(Base, TimestampMixin):
+    """A durable, user-owned Agent execution that can pause and resume safely."""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        Index("ix_agent_runs_owner_status_updated", "user_id", "status", "updated_at"),
+        Index("ix_agent_runs_conversation_updated", "conversation_id", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    goal: Mapped[str] = mapped_column(String(500))
+    intent: Mapped[str] = mapped_column(String(80), default="general_chat", index=True)
+    status: Mapped[str] = mapped_column(String(40), default="planning", index=True)
+    completion_condition: Mapped[str] = mapped_column(String(500), default="向用户返回经过核验的结果")
+    required_input: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # This snapshot deliberately stores only stable IDs and public state. Raw GPS
+    # coordinates, API keys, cookies and model prompts must never be persisted here.
+    context_data: Mapped[dict[str, Any]] = mapped_column("context", JSON, default=dict)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    steps: Mapped[list[AgentRunStep]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="AgentRunStep.sequence"
+    )
+
+
+class AgentRunStep(Base):
+    __tablename__ = "agent_run_steps"
+    __table_args__ = (
+        UniqueConstraint("run_id", "sequence", name="uq_agent_run_step_sequence"),
+        Index("ix_agent_run_steps_run_round", "run_id", "round_number"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    run_id: Mapped[str] = mapped_column(ForeignKey("agent_runs.id", ondelete="CASCADE"), index=True)
+    sequence: Mapped[int] = mapped_column(Integer)
+    round_number: Mapped[int] = mapped_column(Integer, default=1)
+    step_type: Mapped[str] = mapped_column(String(40), default="tool", index=True)
+    tool_name: Mapped[str] = mapped_column(String(100), default="", index=True)
+    public_label: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(30), default="running", index=True)
+    success: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    input_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    output_summary: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    run: Mapped[AgentRun] = relationship(back_populates="steps")
+
+
 class FeedbackSubmission(Base, TimestampMixin):
     __tablename__ = "feedback_submissions"
 
