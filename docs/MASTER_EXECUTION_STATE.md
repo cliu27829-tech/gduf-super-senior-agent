@@ -24,7 +24,7 @@
 | 自动测试 | Python/TypeScript/React | PASSED | 后端 60 项、前端 20 项；compileall、typecheck、lint、build 通过 | 最终提交前再运行一次全量回归 |
 | 浏览器 | 核心工作流与专用 E2E | PASSED | MVP、知识、真实 PDF、真实高德、管理员审核分别通过 | 依赖本机私有凭据的测试通过环境变量启用，不提交路径或凭据 |
 | Docker | 本机 Compose | BLOCKED_EXTERNAL | 本机没有 Docker CLI | Compose 与 CI delivery job 已配置，需由 GitHub Runner/有 Docker 的主机验证 |
-| 发布 | 提交、推送、PR Checks | TESTING | 工作区尚待最终提交 | 推送后更新本项与最终汇报 |
+| 发布 | 提交、推送、PR Checks | PASSED | 实现、验收和 CI 兼容提交均已推送；GitHub backend/frontend/e2e/delivery 全部成功 | PR #1 保持 open，不自动合并 |
 
 ## 私有资料导入摘要
 
