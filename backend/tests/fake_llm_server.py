@@ -13,6 +13,8 @@ app = FastAPI()
 
 def _intent(message: str) -> str:
     patterns = (
+        ("reminder_management", ("提醒我", "设提醒")),
+        ("note_management", ("记一下", "记下来", "便签")),
         ("notification_to_tasks", ("通知", "提交课程报告", "生成任务")),
         ("task_management", ("我的任务", "待办", "已完成", "逾期")),
         ("campus_process", ("校园卡", "挂失", "补办", "报修")),

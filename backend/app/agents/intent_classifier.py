@@ -35,6 +35,10 @@ DEFAULT_TOOL_PLANS = {
 CONVERSATION_RECALL_TERMS = (
     "刚才说", "之前说", "前面说", "我叫什么", "还记得我", "你记得我", "这段对话",
 )
+STRONG_HEURISTIC_INTENTS = {
+    "daily_summary", "reminder_management", "note_management", "campus_fact_search",
+    "notification_to_tasks", "campus_navigation", "task_management",
+}
 
 
 class IntentClassifier:
@@ -68,6 +72,13 @@ class IntentClassifier:
     async def classify(self, message: str) -> IntentDecision:
         if any(term in message for term in CONVERSATION_RECALL_TERMS):
             return IntentDecision(intent="general_chat", confidence=0.95, query=message, tool_plan=[])
+        heuristic = self._heuristic(message)
+        # Explicit user actions and route commands take precedence over model
+        # guesses. For example, “提醒我复习高数” is a reminder, not merely a
+        # learning-advice question; preserving this priority also prevents a
+        # side-effect preview from disappearing because of model variance.
+        if heuristic.intent in STRONG_HEURISTIC_INTENTS:
+            return heuristic
         prompt = (
             "你是校园 Agent 的意图规划器，只输出 json 对象：intent/confidence/query/tool_plan。"
             f"intent 必须属于：{sorted(INTENTS)}。"
@@ -89,7 +100,6 @@ class IntentClassifier:
                 raise ValueError("unsupported intent")
             if decision.intent in FACT_INTENTS and not decision.tool_plan:
                 decision.tool_plan = DEFAULT_TOOL_PLANS.get(decision.intent, [])
-            heuristic = self._heuristic(message)
             if decision.intent in {"general_chat", "campus_life_guidance", "out_of_scope"} and heuristic.intent != "general_chat":
                 return heuristic
             return decision

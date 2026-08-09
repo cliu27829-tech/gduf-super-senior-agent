@@ -45,6 +45,16 @@ def test_college_question_synonyms_override_generic_model_routing():
     assert decision.tool_plan == ["search_campus_facts", "list_campus_colleges"]
 
 
+def test_explicit_reminder_overrides_model_learning_guess():
+    class ConflictingRoutingLLM:
+        async def chat_completion(self, *_args, **_kwargs):
+            return '{"intent":"learning_guidance","confidence":0.99,"query":"高数","tool_plan":[]}'
+
+    decision = asyncio.run(IntentClassifier(ConflictingRoutingLLM()).classify("明天下午3点提醒我复习高数"))
+    assert decision.intent == "reminder_management"
+    assert decision.tool_plan == ["preview_reminder"]
+
+
 def test_reminder_plan_cannot_bypass_confirmation_preview():
     class UnsafePlannerLLM:
         async def chat_completion(self, *_args, **_kwargs):
